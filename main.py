@@ -10,11 +10,12 @@ from app.ui.tray import TrayController
 
 
 def main() -> int:
-    """Create the Qt application and initialize future tray integration."""
+    """Start the Qt application and run tray-resident MVP."""
     app = QApplication(sys.argv)
-    tray = TrayController()
+    app.setQuitOnLastWindowClosed(False)
+    tray = TrayController(app)
     tray.setup()
-    return 0
+    return app.exec()
 
 
 if __name__ == "__main__":
