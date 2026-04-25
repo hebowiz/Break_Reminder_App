@@ -6,25 +6,32 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QKeyEvent
-from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 
 class EndWorkConfirmDialog(QDialog):
     """Confirmation dialog to prevent accidental work-end action."""
 
-    def __init__(self, parent: QDialog | None = None) -> None:
+    def __init__(self, end_confirm_message: str, parent: QDialog | None = None) -> None:
         super().__init__(parent)
         self._confirmed = False
+        self._end_confirm_message = end_confirm_message
+        self._memo_input: QLineEdit | None = None
         self._setup_ui()
 
-    def ask(self) -> bool:
-        """Show confirmation dialog and return whether end-work is confirmed."""
+    def ask(self) -> tuple[bool, str]:
+        """Show confirmation dialog and return (confirmed, memo)."""
         self._confirmed = False
+        if self._memo_input is not None:
+            self._memo_input.clear()
         self.show()
         self.raise_()
         self.activateWindow()
         self.exec()
-        return self._confirmed
+        memo = ""
+        if self._memo_input is not None:
+            memo = self._memo_input.text().strip()
+        return self._confirmed, memo
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         """Ignore Enter/Escape to avoid accidental confirmation/close."""
@@ -46,7 +53,7 @@ class EndWorkConfirmDialog(QDialog):
         self.setMinimumWidth(320)
 
         layout = QVBoxLayout(self)
-        label = QLabel("本日の作業を本当に終了しますか？", self)
+        label = QLabel(self._end_confirm_message, self)
         label.setWordWrap(True)
         layout.addWidget(label)
 
@@ -62,6 +69,10 @@ class EndWorkConfirmDialog(QDialog):
 
         layout.addWidget(confirm_button)
         layout.addWidget(continue_button)
+
+        self._memo_input = QLineEdit(self)
+        self._memo_input.setPlaceholderText("終了理由やメモ（任意）")
+        layout.addWidget(self._memo_input)
 
     def _confirm_end_work(self) -> None:
         """Confirm end-work request."""
@@ -83,11 +94,19 @@ class BreakDialog(QDialog):
     MESSAGE_NORMAL = "normal"
     MESSAGE_TOO_SHORT = "too_short"
 
-    def __init__(self, on_decision: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        on_decision: Callable[[str, str | None], None],
+        break_normal_message: str,
+        break_too_short_message: str,
+        end_confirm_message: str,
+    ) -> None:
         super().__init__(None)
         self._on_decision = on_decision
+        self._break_normal_message = break_normal_message
+        self._break_too_short_message = break_too_short_message
         self._message_label: QLabel | None = None
-        self._confirm_dialog = EndWorkConfirmDialog(self)
+        self._confirm_dialog = EndWorkConfirmDialog(end_confirm_message, self)
         self._setup_ui()
 
     def open_prompt(self, message_kind: str = MESSAGE_NORMAL) -> None:
@@ -141,20 +160,20 @@ class BreakDialog(QDialog):
         if self._message_label is None:
             return
         if message_kind == self.MESSAGE_TOO_SHORT:
-            self._message_label.setText("まだ休憩できていません。もう少しPCから離れてください。")
+            self._message_label.setText(self._break_too_short_message)
             return
-        self._message_label.setText("休憩中です。戻るときに「休憩完了」を押してください。")
+        self._message_label.setText(self._break_normal_message)
 
-    def _decide(self, action: str) -> None:
+    def _decide(self, action: str, memo: str | None = None) -> None:
         """Notify decision and hide dialog."""
         self.hide()
-        self._on_decision(action)
+        self._on_decision(action, memo)
 
     def _confirm_end_work(self) -> None:
         """Ask for confirmation before ending today's work."""
-        confirmed = self._confirm_dialog.ask()
+        confirmed, memo = self._confirm_dialog.ask()
         if confirmed:
-            self._decide(self.ACTION_END_WORK)
+            self._decide(self.ACTION_END_WORK, memo)
             return
         self.raise_()
         self.activateWindow()

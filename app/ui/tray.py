@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import traceback
-from pathlib import Path
 
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemTrayIcon
@@ -14,7 +12,7 @@ from app.core.timer_controller import TimerController
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
-from app.ui.break_dialog import BreakDialog
+from app.ui.break_dialog import BreakDialog, EndWorkConfirmDialog
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
@@ -26,7 +24,6 @@ class TrayController:
     def __init__(self, app: QApplication) -> None:
         self._app = app
         self._config: AppConfig = load_config()
-        self._status_popup = StatusPopup()
         self._is_break_dialog_open = False
         self._logger = self._create_logger()
         self._notifier = self._create_notifier()
@@ -38,7 +35,19 @@ class TrayController:
             logger=self._logger,
             notifier=self._notifier,
         )
-        self._break_dialog = BreakDialog(on_decision=self._on_break_decision)
+        self._status_popup = StatusPopup(
+            state_provider=lambda: self._timer_controller.state,
+            remaining_provider=self._timer_controller.get_remaining_seconds,
+        )
+        self._break_dialog = BreakDialog(
+            on_decision=self._on_break_decision,
+            break_normal_message=self._config.messages["break_normal"],
+            break_too_short_message=self._config.messages["break_too_short"],
+            end_confirm_message=self._config.messages["end_confirm"],
+        )
+        self._stop_confirm_dialog = EndWorkConfirmDialog(
+            end_confirm_message=self._config.messages["end_confirm"],
+        )
 
         self._tray_icon = QSystemTrayIcon(self._build_icon(), app)
         self._menu = QMenu()
@@ -48,7 +57,6 @@ class TrayController:
         self._status_action = QAction("状態表示", self._menu)
         self._show_logs_action = QAction("ログを表示", self._menu)
         self._settings_action = QAction("設定", self._menu)
-        self._open_log_folder_action = QAction("ログフォルダを開く", self._menu)
         self._quit_action = QAction("終了", self._menu)
 
     def setup(self) -> None:
@@ -65,9 +73,6 @@ class TrayController:
         self._status_action.triggered.connect(lambda checked=False: self.show_status(checked))
         self._settings_action.triggered.connect(lambda checked=False: self.show_settings(checked))
         self._show_logs_action.triggered.connect(lambda checked=False: self.show_logs(checked))
-        self._open_log_folder_action.triggered.connect(
-            lambda checked=False: self.open_log_folder(checked)
-        )
         self._quit_action.triggered.connect(lambda checked=False: self.quit_app(checked))
 
         self._menu.addAction(self._start_or_resume_action)
@@ -76,7 +81,6 @@ class TrayController:
         self._menu.addAction(self._status_action)
         self._menu.addAction(self._settings_action)
         self._menu.addAction(self._show_logs_action)
-        self._menu.addAction(self._open_log_folder_action)
         self._menu.addSeparator()
         self._menu.addAction(self._quit_action)
 
@@ -97,12 +101,21 @@ class TrayController:
             traceback.print_exc()
 
     def stop_work(self, checked: bool = False) -> None:
-        """Stop work timer via TimerController."""
+        """Ask confirmation and stop work timer when confirmed."""
         try:
             _ = checked
+            was_break_dialog_open = self._is_break_dialog_open
+            confirmed, memo = self._stop_confirm_dialog.ask()
+            if not confirmed:
+                if was_break_dialog_open:
+                    self._break_dialog.raise_()
+                    self._break_dialog.activateWindow()
+                return
+
+            end_reason = memo if memo else "stopped"
             self._break_dialog.hide()
             self._is_break_dialog_open = False
-            self._timer_controller.stop_work(end_reason="stopped")
+            self._timer_controller.stop_work(end_reason=end_reason)
             self._update_action_state()
         except Exception:
             traceback.print_exc()
@@ -119,22 +132,10 @@ class TrayController:
             traceback.print_exc()
 
     def show_status(self, checked: bool = False) -> None:
-        """Show current state and optional remaining time popup."""
+        """Show realtime status dialog."""
         try:
             _ = checked
-            state = self._timer_controller.state
-            remaining = self._timer_controller.get_remaining_seconds()
-            self._status_popup.show_state(state, remaining)
-        except Exception:
-            traceback.print_exc()
-
-    def open_log_folder(self, checked: bool = False) -> None:
-        """Open data folder containing logs.db in Explorer."""
-        try:
-            _ = checked
-            target_dir = self._logger.data_dir if self._logger is not None else Path("data")
-            target_dir.mkdir(parents=True, exist_ok=True)
-            os.startfile(str(target_dir))
+            self._status_popup.show_dialog()
         except Exception:
             traceback.print_exc()
 
@@ -170,6 +171,15 @@ class TrayController:
             self._timer_controller.update_settings(
                 work_minutes=self._config.work_minutes,
                 notifier=self._notifier,
+            )
+            self._break_dialog = BreakDialog(
+                on_decision=self._on_break_decision,
+                break_normal_message=self._config.messages["break_normal"],
+                break_too_short_message=self._config.messages["break_too_short"],
+                end_confirm_message=self._config.messages["end_confirm"],
+            )
+            self._stop_confirm_dialog = EndWorkConfirmDialog(
+                end_confirm_message=self._config.messages["end_confirm"],
             )
 
             if self._timer_controller.state == AppState.WORKING:
@@ -210,7 +220,7 @@ class TrayController:
         except Exception:
             traceback.print_exc()
 
-    def _on_break_decision(self, action: str) -> None:
+    def _on_break_decision(self, action: str, memo: str | None = None) -> None:
         """Apply user decision from break dialog."""
         try:
             self._is_break_dialog_open = False
@@ -223,7 +233,8 @@ class TrayController:
                     return
                 self._timer_controller.resume_work()
             elif action == BreakDialog.ACTION_END_WORK:
-                self._timer_controller.stop_work(end_reason="user_ended")
+                end_reason = memo if memo else "user_ended"
+                self._timer_controller.stop_work(end_reason=end_reason)
             self._update_action_state()
         except Exception:
             traceback.print_exc()
@@ -259,4 +270,5 @@ class TrayController:
         return NtfyNotifier(
             enabled=self._config.ntfy_enabled,
             topic=self._config.ntfy_topic,
+            message=self._config.messages["break_normal"],
         )

@@ -18,12 +18,12 @@ class TimerController:
 
     def __init__(
         self,
-        work_minutes: float,
+        work_minutes: int,
         on_work_timer_elapsed: Callable[[], None] | None = None,
         logger: SQLiteLogger | None = None,
         notifier: NtfyNotifier | None = None,
     ) -> None:
-        self._work_minutes = max(0.1, float(work_minutes))
+        self._work_minutes = max(1, int(work_minutes))
         self._on_work_timer_elapsed = on_work_timer_elapsed
         self._logger = logger
         self._notifier = notifier
@@ -51,9 +51,9 @@ class TimerController:
         if self._logger is not None:
             self._active_session_id = self._logger.create_session()
 
-    def update_settings(self, work_minutes: float, notifier: NtfyNotifier | None) -> None:
+    def update_settings(self, work_minutes: int, notifier: NtfyNotifier | None) -> None:
         """Update timer-related settings for future work sessions."""
-        self._work_minutes = max(0.1, float(work_minutes))
+        self._work_minutes = max(1, int(work_minutes))
         self._notifier = notifier
 
     def stop_work(self, end_reason: str = "stopped") -> None:
@@ -99,9 +99,9 @@ class TimerController:
             return None
         return max(0, math.ceil(remaining_ms / 1000))
 
-    def _start_work_timer(self, minutes: float) -> None:
+    def _start_work_timer(self, minutes: int) -> None:
         """Start single-shot timer for the given minutes."""
-        duration_ms = max(100, int(round(max(0.1, minutes) * 60 * 1000)))
+        duration_ms = max(1, int(minutes)) * 60 * 1000
         self._work_timer.start(duration_ms)
 
     def _handle_work_timer_elapsed(self) -> None:

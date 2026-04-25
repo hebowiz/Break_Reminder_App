@@ -4,5 +4,10 @@
   "ntfy_enabled": false,
   "ntfy_topic": "",
   "notification_level": 2,
-  "effects_enabled": false
+  "effects_enabled": false,
+  "messages": {
+    "break_normal": "休憩時間です。PCから離れてください。",
+    "break_too_short": "まだ休憩できていません。もう少しPCから離れてください。",
+    "end_confirm": "本当に今日の作業を終了しますか？"
+  }
 }

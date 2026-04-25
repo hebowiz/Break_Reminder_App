@@ -7,7 +7,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QLabel,
     QLineEdit,
@@ -25,8 +24,9 @@ class SettingsDialog(QDialog):
     def __init__(self, parent: QDialog | None = None) -> None:
         super().__init__(parent)
         self._saved_config: AppConfig | None = None
+        self._current_config: AppConfig = load_config()
         self._setup_ui()
-        self._load_values(load_config())
+        self._load_values(self._current_config)
 
     @property
     def saved_config(self) -> AppConfig | None:
@@ -38,10 +38,9 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("設定")
         self.setMinimumWidth(420)
 
-        self._work_minutes = QDoubleSpinBox(self)
-        self._work_minutes.setRange(0.1, 240.0)
-        self._work_minutes.setSingleStep(0.1)
-        self._work_minutes.setDecimals(1)
+        self._work_minutes = QSpinBox(self)
+        self._work_minutes.setRange(1, 240)
+        self._work_minutes.setSingleStep(1)
         self._work_minutes.setSuffix(" 分")
 
         self._min_break_seconds = QSpinBox(self)
@@ -94,12 +93,13 @@ class SettingsDialog(QDialog):
     def _build_config(self) -> AppConfig:
         """Build AppConfig from current widget values."""
         return AppConfig(
-            work_minutes=float(self._work_minutes.value()),
+            work_minutes=int(self._work_minutes.value()),
             min_break_seconds=int(self._min_break_seconds.value()),
             ntfy_enabled=bool(self._ntfy_enabled.isChecked()),
             ntfy_topic=self._ntfy_topic.text().strip(),
             notification_level=int(self._notification_level.currentData()),
             effects_enabled=bool(self._effects_enabled.isChecked()),
+            messages=dict(self._current_config.messages),
         )
 
     def _on_save(self) -> None:

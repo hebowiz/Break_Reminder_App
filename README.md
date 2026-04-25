@@ -22,12 +22,13 @@ Copy-Item config.example.json config.json
 
 ## 設定項目（config.json）
 
-- `work_minutes`: 作業タイマーの分数
+- `work_minutes`: 作業タイマーの分数（整数、1〜240）
 - `min_break_seconds`: 最低休憩秒数
 - `ntfy_enabled`: ntfy通知の有効/無効
 - `ntfy_topic`: ntfyトピック名（空なら送信しない）
 - `notification_level`: 通知レベル（MVPでは2想定）
 - `effects_enabled`: 演出機能の有効/無効（MVPでは未使用）
+- `messages`: ダイアログ/通知文言のカスタマイズ
 
 `config.json` が存在しない場合や、JSON/型が不正な場合はデフォルト値で起動し、エラー内容を標準出力へ表示します。
 
@@ -36,6 +37,20 @@ Copy-Item config.example.json config.json
 1. Android に `ntfy` アプリをインストール
 2. 任意トピックを購読
 3. `config.json` で `ntfy_enabled: true` と `ntfy_topic` を設定
+
+### メッセージ文言の編集
+
+`messages` は現状の設定画面では編集できないため、`config.json` を直接編集してください。
+
+```json
+{
+  "messages": {
+    "break_normal": "休憩時間です。PCから離れてください。",
+    "break_too_short": "まだ休憩できていません。もう少しPCから離れてください。",
+    "end_confirm": "本当に今日の作業を終了しますか？"
+  }
+}
+```
 
 ## 起動方法
 

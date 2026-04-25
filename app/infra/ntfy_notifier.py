@@ -10,9 +10,10 @@ import requests
 class NtfyNotifier:
     """Send notifications to ntfy.sh."""
 
-    def __init__(self, enabled: bool, topic: str) -> None:
+    def __init__(self, enabled: bool, topic: str, message: str) -> None:
         self._enabled = bool(enabled)
         self._topic = topic.strip()
+        self._message = message
 
     def send_break_notification(self) -> None:
         """Send break reminder notification when enabled and configured."""
@@ -30,7 +31,7 @@ class NtfyNotifier:
         try:
             requests.post(
                 url,
-                data="休憩時間です。PCから離れてください。".encode("utf-8"),
+                data=self._message.encode("utf-8"),
                 headers=headers,
                 timeout=5,
             )

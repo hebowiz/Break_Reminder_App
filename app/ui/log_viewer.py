@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import traceback
+from datetime import datetime
 
 from PySide6.QtWidgets import (
     QDialog,
@@ -35,10 +36,10 @@ class LogViewerDialog(QDialog):
             self._table.setRowCount(len(rows))
             for row_index, row in enumerate(rows):
                 self._set_cell(row_index, 0, str(row.get("id", "")))
-                self._set_cell(row_index, 1, self._to_text(row.get("work_started_at")))
-                self._set_cell(row_index, 2, self._to_text(row.get("timer_fired_at")))
-                self._set_cell(row_index, 3, self._to_text(row.get("work_resumed_at")))
-                self._set_cell(row_index, 4, self._to_text(row.get("work_ended_at")))
+                self._set_cell(row_index, 1, self._format_datetime(row.get("work_started_at")))
+                self._set_cell(row_index, 2, self._format_datetime(row.get("timer_fired_at")))
+                self._set_cell(row_index, 3, self._format_datetime(row.get("work_resumed_at")))
+                self._set_cell(row_index, 4, self._format_datetime(row.get("work_ended_at")))
                 self._set_cell(row_index, 5, self._map_end_reason(row.get("end_reason")))
             self._table.resizeColumnsToContents()
         except Exception:
@@ -90,6 +91,18 @@ class LogViewerDialog(QDialog):
         if value is None:
             return ""
         return str(value)
+
+    @classmethod
+    def _format_datetime(cls, value: object) -> str:
+        """Format ISO8601 datetime text for readability in the table."""
+        text = cls._to_text(value)
+        if not text:
+            return ""
+        try:
+            parsed = datetime.fromisoformat(text)
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return text
 
     @staticmethod
     def _map_end_reason(value: object) -> str:
