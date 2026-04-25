@@ -16,6 +16,7 @@ from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
 from app.ui.break_dialog import BreakDialog
 from app.ui.log_viewer import LogViewerDialog
+from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
 
 
@@ -46,6 +47,7 @@ class TrayController:
         self._stop_action = QAction("作業停止", self._menu)
         self._status_action = QAction("状態表示", self._menu)
         self._show_logs_action = QAction("ログを表示", self._menu)
+        self._settings_action = QAction("設定", self._menu)
         self._open_log_folder_action = QAction("ログフォルダを開く", self._menu)
         self._quit_action = QAction("終了", self._menu)
 
@@ -61,6 +63,7 @@ class TrayController:
         )
         self._stop_action.triggered.connect(lambda checked=False: self.stop_work(checked))
         self._status_action.triggered.connect(lambda checked=False: self.show_status(checked))
+        self._settings_action.triggered.connect(lambda checked=False: self.show_settings(checked))
         self._show_logs_action.triggered.connect(lambda checked=False: self.show_logs(checked))
         self._open_log_folder_action.triggered.connect(
             lambda checked=False: self.open_log_folder(checked)
@@ -71,6 +74,7 @@ class TrayController:
         self._menu.addAction(self._stop_action)
         self._menu.addSeparator()
         self._menu.addAction(self._status_action)
+        self._menu.addAction(self._settings_action)
         self._menu.addAction(self._show_logs_action)
         self._menu.addAction(self._open_log_folder_action)
         self._menu.addSeparator()
@@ -147,6 +151,33 @@ class TrayController:
             self._log_viewer.show()
             self._log_viewer.raise_()
             self._log_viewer.activateWindow()
+        except Exception:
+            traceback.print_exc()
+
+    def show_settings(self, checked: bool = False) -> None:
+        """Open settings dialog and apply saved values."""
+        try:
+            _ = checked
+            dialog = SettingsDialog()
+            if dialog.exec() != SettingsDialog.DialogCode.Accepted:
+                return
+            saved = dialog.saved_config
+            if saved is None:
+                return
+
+            self._config = saved
+            self._notifier = self._create_notifier()
+            self._timer_controller.update_settings(
+                work_minutes=self._config.work_minutes,
+                notifier=self._notifier,
+            )
+
+            if self._timer_controller.state == AppState.WORKING:
+                QMessageBox.information(
+                    None,
+                    "設定を保存しました",
+                    "作業中のため、新しい設定は次回タイマー開始から反映されます。",
+                )
         except Exception:
             traceback.print_exc()
 
