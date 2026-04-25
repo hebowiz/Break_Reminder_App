@@ -1,9 +1,160 @@
-﻿"""Break dialog stub."""
+﻿"""Break prompt dialog for MVP."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent, QKeyEvent
+from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout
 
 
-class BreakDialog:
-    """Represent break-time dialog window."""
+class EndWorkConfirmDialog(QDialog):
+    """Confirmation dialog to prevent accidental work-end action."""
 
-    def show_dialog(self) -> None:
-        """Show break dialog in a future implementation."""
-        return None
+    def __init__(self, parent: QDialog | None = None) -> None:
+        super().__init__(parent)
+        self._confirmed = False
+        self._setup_ui()
+
+    def ask(self) -> bool:
+        """Show confirmation dialog and return whether end-work is confirmed."""
+        self._confirmed = False
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.exec()
+        return self._confirmed
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        """Ignore Enter/Escape to avoid accidental confirmation/close."""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+            event.ignore()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """Treat close button as 'continue working'."""
+        self._confirmed = False
+        event.accept()
+
+    def _setup_ui(self) -> None:
+        """Build minimal confirmation UI."""
+        self.setWindowTitle("終了確認")
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setMinimumWidth(320)
+
+        layout = QVBoxLayout(self)
+        label = QLabel("本日の作業を本当に終了しますか？", self)
+        label.setWordWrap(True)
+        layout.addWidget(label)
+
+        confirm_button = QPushButton("本当に終了", self)
+        continue_button = QPushButton("作業を続ける", self)
+
+        for button in (confirm_button, continue_button):
+            button.setAutoDefault(False)
+            button.setDefault(False)
+
+        confirm_button.clicked.connect(self._confirm_end_work)
+        continue_button.clicked.connect(self._continue_work)
+
+        layout.addWidget(confirm_button)
+        layout.addWidget(continue_button)
+
+    def _confirm_end_work(self) -> None:
+        """Confirm end-work request."""
+        self._confirmed = True
+        self.accept()
+
+    def _continue_work(self) -> None:
+        """Cancel end-work request and continue break flow."""
+        self._confirmed = False
+        self.reject()
+
+
+class BreakDialog(QDialog):
+    """Display break prompt actions without blocking the app."""
+
+    ACTION_BREAK_DONE = "break_done"
+    ACTION_END_WORK = "end_work"
+
+    MESSAGE_NORMAL = "normal"
+    MESSAGE_TOO_SHORT = "too_short"
+
+    def __init__(self, on_decision: Callable[[str], None]) -> None:
+        super().__init__(None)
+        self._on_decision = on_decision
+        self._message_label: QLabel | None = None
+        self._confirm_dialog = EndWorkConfirmDialog(self)
+        self._setup_ui()
+
+    def open_prompt(self, message_kind: str = MESSAGE_NORMAL) -> None:
+        """Open the dialog in non-modal mode and keep it on top."""
+        self._apply_message(message_kind)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        """Ignore Enter/Escape to avoid accidental action."""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Escape):
+            event.ignore()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """Disable close via title-bar close button for MVP."""
+        event.ignore()
+
+    def _setup_ui(self) -> None:
+        """Create minimum break prompt UI with two actions."""
+        self.setWindowTitle("休憩の時間です")
+        self.setWindowModality(Qt.WindowModality.NonModal)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+        self.setMinimumWidth(320)
+
+        layout = QVBoxLayout(self)
+        self._message_label = QLabel(self)
+        self._message_label.setWordWrap(True)
+        layout.addWidget(self._message_label)
+
+        break_done_button = QPushButton("休憩完了", self)
+        end_work_button = QPushButton("今日は終了", self)
+
+        for button in (break_done_button, end_work_button):
+            button.setAutoDefault(False)
+            button.setDefault(False)
+
+        break_done_button.clicked.connect(lambda: self._decide(self.ACTION_BREAK_DONE))
+        end_work_button.clicked.connect(self._confirm_end_work)
+
+        layout.addWidget(break_done_button)
+        layout.addWidget(end_work_button)
+
+        self._apply_message(self.MESSAGE_NORMAL)
+
+    def _apply_message(self, message_kind: str) -> None:
+        """Update prompt text according to message context."""
+        if self._message_label is None:
+            return
+        if message_kind == self.MESSAGE_TOO_SHORT:
+            self._message_label.setText("まだ休憩できていません。もう少しPCから離れてください。")
+            return
+        self._message_label.setText("休憩中です。戻るときに「休憩完了」を押してください。")
+
+    def _decide(self, action: str) -> None:
+        """Notify decision and hide dialog."""
+        self.hide()
+        self._on_decision(action)
+
+    def _confirm_end_work(self) -> None:
+        """Ask for confirmation before ending today's work."""
+        confirmed = self._confirm_dialog.ask()
+        if confirmed:
+            self._decide(self.ACTION_END_WORK)
+            return
+        self.raise_()
+        self.activateWindow()

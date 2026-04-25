@@ -1,8 +1,9 @@
 ﻿{
-  "work_minutes": 50,
+  "work_minutes": 25,
   "snooze_minutes": 5,
   "ntfy_enabled": false,
   "ntfy_topic": "your-topic",
-  "notification_level": "info",
+  "notification_level": 2,
+  "min_break_seconds": 30,
   "effects_enabled": true
 }
