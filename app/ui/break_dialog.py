@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent, QKeyEvent
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout
+from app.infra.idle_tracker import IdleTracker
 
 
 class EndWorkConfirmDialog(QDialog):
@@ -100,21 +101,48 @@ class BreakDialog(QDialog):
         break_normal_message: str,
         break_too_short_message: str,
         end_confirm_message: str,
+        min_break_seconds: int,
+        idle_tracker: IdleTracker | None = None,
     ) -> None:
         super().__init__(None)
         self._on_decision = on_decision
         self._break_normal_message = break_normal_message
         self._break_too_short_message = break_too_short_message
+        self._min_break_seconds = max(1, int(min_break_seconds))
+        self._idle_tracker = idle_tracker
         self._message_label: QLabel | None = None
+        self._idle_label: QLabel | None = None
+        self._break_done_button: QPushButton | None = None
+        self._break_satisfied = False
+        self._fallback_elapsed_seconds = 0
+
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setInterval(1000)
+        self._idle_timer.timeout.connect(self._refresh_idle_info)
+
         self._confirm_dialog = EndWorkConfirmDialog(end_confirm_message, self)
         self._setup_ui()
 
     def open_prompt(self, message_kind: str = MESSAGE_NORMAL) -> None:
         """Open the dialog in non-modal mode and keep it on top."""
         self._apply_message(message_kind)
+        self._break_satisfied = False
+        self._fallback_elapsed_seconds = 0
+        if self._break_done_button is not None:
+            self._break_done_button.setEnabled(False)
+        if self._idle_tracker is not None:
+            self._idle_tracker.reset()
+        self._refresh_idle_info()
+        if not self._idle_timer.isActive():
+            self._idle_timer.start()
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        """Stop sampling loop when dialog is hidden."""
+        self._idle_timer.stop()
+        super().hideEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
         """Ignore Enter/Escape to avoid accidental action."""
@@ -133,12 +161,16 @@ class BreakDialog(QDialog):
         self.setWindowModality(Qt.WindowModality.NonModal)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
-        self.setMinimumWidth(320)
+        self.setMinimumWidth(340)
 
         layout = QVBoxLayout(self)
         self._message_label = QLabel(self)
         self._message_label.setWordWrap(True)
         layout.addWidget(self._message_label)
+
+        self._idle_label = QLabel(self)
+        self._idle_label.setWordWrap(True)
+        layout.addWidget(self._idle_label)
 
         break_done_button = QPushButton("休憩完了", self)
         end_work_button = QPushButton("今日は終了", self)
@@ -149,6 +181,7 @@ class BreakDialog(QDialog):
 
         break_done_button.clicked.connect(lambda: self._decide(self.ACTION_BREAK_DONE))
         end_work_button.clicked.connect(self._confirm_end_work)
+        self._break_done_button = break_done_button
 
         layout.addWidget(break_done_button)
         layout.addWidget(end_work_button)
@@ -164,8 +197,61 @@ class BreakDialog(QDialog):
             return
         self._message_label.setText(self._break_normal_message)
 
+    def _refresh_idle_info(self) -> None:
+        """Update idle status text while the break dialog is open."""
+        if self._idle_label is None:
+            return
+        if self._break_satisfied:
+            self._idle_label.setText("休憩OKです。作業を再開できます。")
+            if self._break_done_button is not None:
+                self._break_done_button.setEnabled(True)
+            return
+        if self._idle_tracker is None:
+            self._fallback_elapsed_seconds += 1
+            remaining = max(0, self._min_break_seconds - self._fallback_elapsed_seconds)
+            if self._fallback_elapsed_seconds >= self._min_break_seconds:
+                self._break_satisfied = True
+                self._idle_timer.stop()
+                self._idle_label.setText("休憩OKです。作業を再開できます。")
+                if self._break_done_button is not None:
+                    self._break_done_button.setEnabled(True)
+                return
+            self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
+            return
+
+        self._idle_tracker.update()
+        idle_seconds = self._idle_tracker.get_idle_seconds()
+        if idle_seconds is None:
+            self._fallback_elapsed_seconds += 1
+            remaining = max(0, self._min_break_seconds - self._fallback_elapsed_seconds)
+            if self._fallback_elapsed_seconds >= self._min_break_seconds:
+                self._break_satisfied = True
+                self._idle_timer.stop()
+                self._idle_label.setText("休憩OKです。作業を再開できます。")
+                if self._break_done_button is not None:
+                    self._break_done_button.setEnabled(True)
+                return
+            self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
+            return
+
+        idle_int = max(0, int(idle_seconds))
+        remaining = max(0, self._min_break_seconds - idle_int)
+        if idle_int >= self._min_break_seconds:
+            self._break_satisfied = True
+            self._idle_timer.stop()
+            self._idle_label.setText("休憩OKです。作業を再開できます。")
+            if self._break_done_button is not None:
+                self._break_done_button.setEnabled(True)
+            return
+        self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
+
+    def is_break_satisfied(self) -> bool:
+        """Return whether this break has already satisfied the requirement."""
+        return self._break_satisfied
+
     def _decide(self, action: str, memo: str | None = None) -> None:
         """Notify decision and hide dialog."""
+        self._idle_timer.stop()
         self.hide()
         self._on_decision(action, memo)
 

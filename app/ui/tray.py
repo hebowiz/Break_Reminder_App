@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemT
 
 from app.config import AppConfig, load_config
 from app.core.timer_controller import TimerController
+from app.infra.idle_tracker import IdleTracker
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
@@ -27,6 +28,7 @@ class TrayController:
         self._is_break_dialog_open = False
         self._logger = self._create_logger()
         self._notifier = self._create_notifier()
+        self._idle_tracker = IdleTracker(debug=True)
         self._log_viewer: LogViewerDialog | None = None
 
         self._timer_controller = TimerController(
@@ -44,6 +46,8 @@ class TrayController:
             break_normal_message=self._config.messages["break_normal"],
             break_too_short_message=self._config.messages["break_too_short"],
             end_confirm_message=self._config.messages["end_confirm"],
+            min_break_seconds=self._config.min_break_seconds,
+            idle_tracker=self._idle_tracker,
         )
         self._stop_confirm_dialog = EndWorkConfirmDialog(
             end_confirm_message=self._config.messages["end_confirm"],
@@ -177,6 +181,8 @@ class TrayController:
                 break_normal_message=self._config.messages["break_normal"],
                 break_too_short_message=self._config.messages["break_too_short"],
                 end_confirm_message=self._config.messages["end_confirm"],
+                min_break_seconds=self._config.min_break_seconds,
+                idle_tracker=self._idle_tracker,
             )
             self._stop_confirm_dialog = EndWorkConfirmDialog(
                 end_confirm_message=self._config.messages["end_confirm"],
@@ -225,12 +231,6 @@ class TrayController:
         try:
             self._is_break_dialog_open = False
             if action == BreakDialog.ACTION_BREAK_DONE:
-                if self._timer_controller.is_break_short(self._config.min_break_seconds):
-                    self._timer_controller.break_started()
-                    self._is_break_dialog_open = True
-                    self._update_action_state()
-                    self._break_dialog.open_prompt(BreakDialog.MESSAGE_TOO_SHORT)
-                    return
                 self._timer_controller.resume_work()
             elif action == BreakDialog.ACTION_END_WORK:
                 end_reason = memo if memo else "user_ended"
