@@ -9,6 +9,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QTimer
 
 from app.infra.logger import SQLiteLogger
+from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
 
 
@@ -18,14 +19,14 @@ class TimerController:
     def __init__(
         self,
         work_minutes: int,
-        snooze_minutes: int,
         on_work_timer_elapsed: Callable[[], None] | None = None,
         logger: SQLiteLogger | None = None,
+        notifier: NtfyNotifier | None = None,
     ) -> None:
         self._work_minutes = max(1, int(work_minutes))
-        self._snooze_minutes = max(1, int(snooze_minutes))
         self._on_work_timer_elapsed = on_work_timer_elapsed
         self._logger = logger
+        self._notifier = notifier
 
         self._state = AppState.STOPPED
         self._break_started_at: float | None = None
@@ -103,5 +104,7 @@ class TimerController:
         if self._logger is not None and self._active_session_id is not None:
             self._logger.mark_timer_fired(self._active_session_id)
         self.break_started()
+        if self._notifier is not None:
+            self._notifier.send_break_notification()
         if self._on_work_timer_elapsed is not None:
             self._on_work_timer_elapsed()

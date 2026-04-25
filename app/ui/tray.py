@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemT
 from app.config import AppConfig, load_config
 from app.core.timer_controller import TimerController
 from app.infra.logger import SQLiteLogger
+from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
 from app.ui.break_dialog import BreakDialog
 from app.ui.log_viewer import LogViewerDialog
@@ -27,13 +28,14 @@ class TrayController:
         self._status_popup = StatusPopup()
         self._is_break_dialog_open = False
         self._logger = self._create_logger()
+        self._notifier = self._create_notifier()
         self._log_viewer: LogViewerDialog | None = None
 
         self._timer_controller = TimerController(
             work_minutes=self._config.work_minutes,
-            snooze_minutes=self._config.snooze_minutes,
             on_work_timer_elapsed=self._on_work_timer_elapsed,
             logger=self._logger,
+            notifier=self._notifier,
         )
         self._break_dialog = BreakDialog(on_decision=self._on_break_decision)
 
@@ -220,3 +222,10 @@ class TrayController:
         except Exception:
             traceback.print_exc()
             return None
+
+    def _create_notifier(self) -> NtfyNotifier:
+        """Create ntfy notifier from app config."""
+        return NtfyNotifier(
+            enabled=self._config.ntfy_enabled,
+            topic=self._config.ntfy_topic,
+        )
