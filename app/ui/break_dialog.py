@@ -173,7 +173,7 @@ class BreakDialog(QDialog):
         self._idle_label.setWordWrap(True)
         layout.addWidget(self._idle_label)
 
-        break_done_button = QPushButton("休憩完了", self)
+        break_done_button = QPushButton("作業再開", self)
         end_work_button = QPushButton("今日は終了", self)
 
         for button in (break_done_button, end_work_button):
@@ -203,7 +203,7 @@ class BreakDialog(QDialog):
         if self._idle_label is None:
             return
         if self._break_satisfied:
-            self._idle_label.setText("休憩OKです。作業を再開できます。")
+            self._idle_label.setText("")
             if self._break_done_button is not None:
                 self._break_done_button.setEnabled(True)
             return
@@ -251,7 +251,7 @@ class BreakDialog(QDialog):
         self._break_satisfied = True
         self._idle_timer.stop()
         if self._idle_label is not None:
-            self._idle_label.setText("休憩OKです。作業を再開できます。")
+            self._idle_label.setText("")
         if self._break_done_button is not None:
             self._break_done_button.setEnabled(True)
         if self._on_break_satisfied is not None:
