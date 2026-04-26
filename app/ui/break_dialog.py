@@ -135,9 +135,8 @@ class BreakDialog(QDialog):
         self._refresh_idle_info()
         if not self._idle_timer.isActive():
             self._idle_timer.start()
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.show()
-        self.raise_()
-        self.activateWindow()
 
     def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
         """Stop sampling loop when dialog is hidden."""
