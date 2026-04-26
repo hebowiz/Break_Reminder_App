@@ -75,6 +75,12 @@ class SettingsDialog(QDialog):
         image_path_container = QWidget(self)
         image_path_container.setLayout(image_path_layout)
 
+        self._start_with_windows = QCheckBox("Windows起動時に自動起動", self)
+        self._hotkey_enabled = QCheckBox("作業開始ショートカットを有効化", self)
+        self._hotkey_start_work = QLineEdit(self)
+        self._hotkey_start_work.setPlaceholderText("例: Ctrl+Alt+B")
+        self._hotkey_enabled.toggled.connect(self._hotkey_start_work.setEnabled)
+
         form = QFormLayout()
         form.addRow("作業時間", self._work_minutes)
         form.addRow("最低休憩時間", self._min_break_seconds)
@@ -83,6 +89,9 @@ class SettingsDialog(QDialog):
         form.addRow("通知レベル", self._notification_level)
         form.addRow("演出", self._effects_enabled)
         form.addRow("演出画像", image_path_container)
+        form.addRow("自動起動", self._start_with_windows)
+        form.addRow("ショートカット", self._hotkey_enabled)
+        form.addRow("開始ホットキー", self._hotkey_start_work)
 
         note = QLabel("保存後、作業中の場合は次回タイマー開始から反映されます。", self)
 
@@ -107,6 +116,10 @@ class SettingsDialog(QDialog):
 
         self._effects_enabled.setChecked(config.effects_enabled)
         self._effect_image_path.setText(config.effect_image_path)
+        self._start_with_windows.setChecked(config.start_with_windows)
+        self._hotkey_enabled.setChecked(config.hotkey_enabled)
+        self._hotkey_start_work.setText(config.hotkey_start_work)
+        self._hotkey_start_work.setEnabled(config.hotkey_enabled)
 
     def _build_config(self) -> AppConfig:
         """Build AppConfig from current widget values."""
@@ -118,6 +131,9 @@ class SettingsDialog(QDialog):
             notification_level=int(self._notification_level.currentData()),
             effects_enabled=bool(self._effects_enabled.isChecked()),
             effect_image_path=self._effect_image_path.text().strip(),
+            start_with_windows=bool(self._start_with_windows.isChecked()),
+            hotkey_enabled=bool(self._hotkey_enabled.isChecked()),
+            hotkey_start_work=self._hotkey_start_work.text().strip() or "Ctrl+Alt+B",
             messages=dict(self._current_config.messages),
         )
 

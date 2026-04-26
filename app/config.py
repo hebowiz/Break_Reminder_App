@@ -27,6 +27,9 @@ class AppConfig:
     notification_level: int = 2
     effects_enabled: bool = False
     effect_image_path: str = ""
+    start_with_windows: bool = False
+    hotkey_enabled: bool = True
+    hotkey_start_work: str = "Ctrl+Alt+B"
     messages: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_MESSAGES))
 
 
@@ -156,6 +159,10 @@ def load_config(path: Path | None = None) -> AppConfig:
             ),
             effects_enabled=_as_bool(raw.get("effects_enabled"), default.effects_enabled),
             effect_image_path=_as_str(raw.get("effect_image_path"), default.effect_image_path),
+            start_with_windows=_as_bool(raw.get("start_with_windows"), default.start_with_windows),
+            hotkey_enabled=_as_bool(raw.get("hotkey_enabled"), default.hotkey_enabled),
+            hotkey_start_work=_as_str(raw.get("hotkey_start_work"), default.hotkey_start_work)
+            or default.hotkey_start_work,
             messages=_as_messages(raw.get("messages"), default.messages),
         )
     except Exception:
@@ -174,6 +181,9 @@ def save_config(config: AppConfig, path: Path | None = None) -> bool:
         "notification_level": int(config.notification_level),
         "effects_enabled": bool(config.effects_enabled),
         "effect_image_path": str(config.effect_image_path),
+        "start_with_windows": bool(config.start_with_windows),
+        "hotkey_enabled": bool(config.hotkey_enabled),
+        "hotkey_start_work": str(config.hotkey_start_work or "Ctrl+Alt+B"),
         "messages": _as_messages(config.messages, DEFAULT_MESSAGES),
     }
 

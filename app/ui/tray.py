@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import traceback
+from pathlib import Path
 
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemTrayIcon
@@ -10,9 +11,11 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemT
 from app.config import AppConfig, load_config
 from app.core.timer_controller import TimerController
 from app.effects.effect_manager import EffectManager
+from app.infra.hotkey import GlobalHotkeyManager
 from app.infra.idle_tracker import IdleTracker
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
+from app.infra.startup import apply_startup_setting
 from app.state import AppState
 from app.ui.break_dialog import BreakDialog, EndWorkConfirmDialog
 from app.ui.log_viewer import LogViewerDialog
@@ -30,6 +33,7 @@ class TrayController:
         self._logger = self._create_logger()
         self._notifier = self._create_notifier()
         self._idle_tracker = IdleTracker()
+        self._hotkey_manager = GlobalHotkeyManager(self._app, self._on_hotkey_start_work)
         self._effect_manager = EffectManager(
             enabled=self._config.effects_enabled,
             effect_image_path=self._config.effect_image_path,
@@ -97,6 +101,8 @@ class TrayController:
         self._tray_icon.setContextMenu(self._menu)
         self._tray_icon.setToolTip("Break Reminder")
         self._tray_icon.show()
+        self._apply_windows_startup(notify=False)
+        self._apply_hotkey_settings(notify=False)
         self._update_action_state()
 
     def start_work(self, checked: bool = False) -> None:
@@ -194,6 +200,8 @@ class TrayController:
                 enabled=self._config.effects_enabled,
                 effect_image_path=self._config.effect_image_path,
             )
+            self._apply_windows_startup(notify=True)
+            self._apply_hotkey_settings(notify=True)
             self._stop_confirm_dialog = EndWorkConfirmDialog(
                 end_confirm_message=self._config.messages["end_confirm"],
             )
@@ -213,6 +221,7 @@ class TrayController:
             _ = checked
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
+            self._hotkey_manager.shutdown()
             self._tray_icon.hide()
             self._app.quit()
         except Exception:
@@ -260,6 +269,15 @@ class TrayController:
         """Hide overlay once break requirement is satisfied."""
         self._effect_manager.hide_break_effect()
 
+    def _on_hotkey_start_work(self) -> None:
+        """Start work via global hotkey only from STOPPED state."""
+        try:
+            if self._timer_controller.state != AppState.STOPPED:
+                return
+            self.start_work()
+        except Exception:
+            traceback.print_exc()
+
     def _update_action_state(self) -> None:
         """Update menu labels and enabled states according to app state."""
         state = self._timer_controller.state
@@ -293,3 +311,29 @@ class TrayController:
             topic=self._config.ntfy_topic,
             message=self._config.messages["break_normal"],
         )
+
+    def _apply_windows_startup(self, notify: bool) -> None:
+        """Apply startup shortcut setting for current config."""
+        ok = apply_startup_setting(
+            enabled=self._config.start_with_windows,
+            app_root=Path(__file__).resolve().parents[2],
+        )
+        if notify and not ok:
+            QMessageBox.warning(
+                None,
+                "自動起動設定エラー",
+                "Windows起動時の自動起動設定に失敗しました。",
+            )
+
+    def _apply_hotkey_settings(self, notify: bool) -> None:
+        """Apply global hotkey setting for current config."""
+        ok = self._hotkey_manager.apply_settings(
+            enabled=self._config.hotkey_enabled,
+            hotkey_text=self._config.hotkey_start_work,
+        )
+        if notify and not ok and self._config.hotkey_enabled:
+            QMessageBox.warning(
+                None,
+                "ホットキー設定エラー",
+                "作業開始ショートカットの登録に失敗しました。",
+            )

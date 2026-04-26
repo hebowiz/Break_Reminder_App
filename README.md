@@ -29,6 +29,9 @@ Copy-Item config.example.json config.json
 - `notification_level`: 通知レベル（MVPでは2想定）
 - `effects_enabled`: 休憩オーバーレイ画像演出の有効/無効
 - `effect_image_path`: 休憩オーバーレイに表示する画像ファイルパス（空なら表示しない）
+- `start_with_windows`: Windowsログイン時の自動起動
+- `hotkey_enabled`: グローバル作業開始ホットキーの有効/無効
+- `hotkey_start_work`: 作業開始ホットキー文字列（MVP既定: `Ctrl+Alt+B`）
 - `messages`: ダイアログ/通知文言のカスタマイズ
 
 `config.json` が存在しない場合や、JSON/型が不正な場合はデフォルト値で起動し、エラー内容を標準出力へ表示します。
@@ -65,12 +68,20 @@ Copy-Item config.example.json config.json
 python main.py
 ```
 
+## Windows連携機能
+
+- 設定ダイアログの「Windows起動時に自動起動」をONにすると、Startupフォルダへ `Break Reminder App.lnk` を作成します
+- 「作業開始ショートカットを有効化」をONにすると、グローバルホットキーで作業開始できます（既定: `Ctrl+Alt+B`）
+- いずれも設定保存後に即時反映されます
+
 ## MVP機能一覧
 
 - タスクトレイ常駐
 - 作業開始/停止
 - 作業タイマー満了で休憩ダイアログ表示
 - 最低休憩秒数チェックと再通知
+- Windowsスタートアップ登録（任意）
+- グローバルホットキー開始（任意）
 - ntfy によるAndroid通知（任意）
 - SQLiteログ記録
 - アプリ内ログビューア
