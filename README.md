@@ -27,7 +27,8 @@ Copy-Item config.example.json config.json
 - `ntfy_enabled`: ntfy通知の有効/無効
 - `ntfy_topic`: ntfyトピック名（空なら送信しない）
 - `notification_level`: 通知レベル（MVPでは2想定）
-- `effects_enabled`: 演出機能の有効/無効（MVPでは未使用）
+- `effects_enabled`: 休憩オーバーレイ画像演出の有効/無効
+- `effect_image_path`: 休憩オーバーレイに表示する画像ファイルパス（空なら表示しない）
 - `messages`: ダイアログ/通知文言のカスタマイズ
 
 `config.json` が存在しない場合や、JSON/型が不正な場合はデフォルト値で起動し、エラー内容を標準出力へ表示します。
@@ -51,6 +52,12 @@ Copy-Item config.example.json config.json
   }
 }
 ```
+
+## 休憩オーバーレイ画像
+
+- 設定ダイアログの「演出」を有効化し、「演出画像」でファイルを選択できます
+- 対応形式: `.jpg` `.jpeg` `.bmp` `.png` `.gif`
+- `effects_enabled=true` かつ `effect_image_path` が有効な場合のみ表示します
 
 ## 起動方法
 

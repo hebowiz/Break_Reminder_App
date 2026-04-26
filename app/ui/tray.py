@@ -32,7 +32,7 @@ class TrayController:
         self._idle_tracker = IdleTracker()
         self._effect_manager = EffectManager(
             enabled=self._config.effects_enabled,
-            overlay_text=self._config.messages["break_normal"],
+            effect_image_path=self._config.effect_image_path,
         )
         self._log_viewer: LogViewerDialog | None = None
 
@@ -192,7 +192,7 @@ class TrayController:
             )
             self._effect_manager.update_settings(
                 enabled=self._config.effects_enabled,
-                overlay_text=self._config.messages["break_normal"],
+                effect_image_path=self._config.effect_image_path,
             )
             self._stop_confirm_dialog = EndWorkConfirmDialog(
                 end_confirm_message=self._config.messages["end_confirm"],
@@ -233,7 +233,11 @@ class TrayController:
         try:
             self._is_break_dialog_open = True
             self._update_action_state()
-            self._effect_manager.show_break_effect()
+            self._effect_manager.update_settings(
+                enabled=self._config.effects_enabled,
+                effect_image_path=self._config.effect_image_path,
+            )
+            self._effect_manager.show_break_effect(effect_image_path=self._config.effect_image_path)
             self._break_dialog.open_prompt(BreakDialog.MESSAGE_NORMAL)
         except Exception:
             traceback.print_exc()

@@ -26,6 +26,7 @@ class AppConfig:
     ntfy_topic: str = ""
     notification_level: int = 2
     effects_enabled: bool = False
+    effect_image_path: str = ""
     messages: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_MESSAGES))
 
 
@@ -154,6 +155,7 @@ def load_config(path: Path | None = None) -> AppConfig:
                 min_value=1,
             ),
             effects_enabled=_as_bool(raw.get("effects_enabled"), default.effects_enabled),
+            effect_image_path=_as_str(raw.get("effect_image_path"), default.effect_image_path),
             messages=_as_messages(raw.get("messages"), default.messages),
         )
     except Exception:
@@ -171,6 +173,7 @@ def save_config(config: AppConfig, path: Path | None = None) -> bool:
         "ntfy_topic": str(config.ntfy_topic),
         "notification_level": int(config.notification_level),
         "effects_enabled": bool(config.effects_enabled),
+        "effect_image_path": str(config.effect_image_path),
         "messages": _as_messages(config.messages, DEFAULT_MESSAGES),
     }
 

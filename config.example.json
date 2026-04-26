@@ -5,6 +5,7 @@
   "ntfy_topic": "",
   "notification_level": 2,
   "effects_enabled": false,
+  "effect_image_path": "",
   "messages": {
     "break_normal": "休憩時間です。PCから離れてください。",
     "break_too_short": "まだ休憩できていません。もう少しPCから離れてください。",

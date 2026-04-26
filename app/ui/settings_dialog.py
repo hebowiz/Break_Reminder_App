@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
+    QFileDialog,
+    QHBoxLayout,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -11,8 +13,10 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from app.config import AppConfig, load_config, save_config
@@ -57,7 +61,19 @@ class SettingsDialog(QDialog):
         self._notification_level.addItem("Level 3", 3)
 
         self._effects_enabled = QCheckBox("演出を有効化（未実装）", self)
-        self._effects_enabled.setEnabled(False)
+        self._effects_enabled.setText("演出を有効化")
+
+        self._effect_image_path = QLineEdit(self)
+        self._effect_image_path.setPlaceholderText("画像ファイルを選択（任意）")
+        browse_button = QPushButton("参照", self)
+        browse_button.clicked.connect(self._browse_effect_image)
+
+        image_path_layout = QHBoxLayout()
+        image_path_layout.setContentsMargins(0, 0, 0, 0)
+        image_path_layout.addWidget(self._effect_image_path)
+        image_path_layout.addWidget(browse_button)
+        image_path_container = QWidget(self)
+        image_path_container.setLayout(image_path_layout)
 
         form = QFormLayout()
         form.addRow("作業時間", self._work_minutes)
@@ -66,6 +82,7 @@ class SettingsDialog(QDialog):
         form.addRow("ntfy topic", self._ntfy_topic)
         form.addRow("通知レベル", self._notification_level)
         form.addRow("演出", self._effects_enabled)
+        form.addRow("演出画像", image_path_container)
 
         note = QLabel("保存後、作業中の場合は次回タイマー開始から反映されます。", self)
 
@@ -89,6 +106,7 @@ class SettingsDialog(QDialog):
         self._notification_level.setCurrentIndex(index if index >= 0 else 1)
 
         self._effects_enabled.setChecked(config.effects_enabled)
+        self._effect_image_path.setText(config.effect_image_path)
 
     def _build_config(self) -> AppConfig:
         """Build AppConfig from current widget values."""
@@ -99,6 +117,7 @@ class SettingsDialog(QDialog):
             ntfy_topic=self._ntfy_topic.text().strip(),
             notification_level=int(self._notification_level.currentData()),
             effects_enabled=bool(self._effects_enabled.isChecked()),
+            effect_image_path=self._effect_image_path.text().strip(),
             messages=dict(self._current_config.messages),
         )
 
@@ -110,3 +129,16 @@ class SettingsDialog(QDialog):
             return
         self._saved_config = config
         self.accept()
+
+    def _browse_effect_image(self) -> None:
+        """Open file dialog and set selected effect image path."""
+        current_path = self._effect_image_path.text().strip()
+        selected_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "演出画像を選択",
+            current_path,
+            "Images (*.jpg *.jpeg *.bmp *.png *.gif)",
+        )
+        if not selected_path:
+            return
+        self._effect_image_path.setText(selected_path)
