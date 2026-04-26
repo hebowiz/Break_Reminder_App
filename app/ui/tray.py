@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemT
 
 from app.config import AppConfig, load_config
 from app.core.timer_controller import TimerController
+from app.effects.effect_manager import EffectManager
 from app.infra.idle_tracker import IdleTracker
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
@@ -28,7 +29,11 @@ class TrayController:
         self._is_break_dialog_open = False
         self._logger = self._create_logger()
         self._notifier = self._create_notifier()
-        self._idle_tracker = IdleTracker(debug=True)
+        self._idle_tracker = IdleTracker()
+        self._effect_manager = EffectManager(
+            enabled=self._config.effects_enabled,
+            overlay_text=self._config.messages["break_normal"],
+        )
         self._log_viewer: LogViewerDialog | None = None
 
         self._timer_controller = TimerController(
@@ -48,6 +53,7 @@ class TrayController:
             end_confirm_message=self._config.messages["end_confirm"],
             min_break_seconds=self._config.min_break_seconds,
             idle_tracker=self._idle_tracker,
+            on_break_satisfied=self._on_break_satisfied,
         )
         self._stop_confirm_dialog = EndWorkConfirmDialog(
             end_confirm_message=self._config.messages["end_confirm"],
@@ -98,6 +104,7 @@ class TrayController:
         try:
             _ = checked
             self._break_dialog.hide()
+            self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
             self._timer_controller.start_work()
             self._update_action_state()
@@ -108,16 +115,13 @@ class TrayController:
         """Ask confirmation and stop work timer when confirmed."""
         try:
             _ = checked
-            was_break_dialog_open = self._is_break_dialog_open
             confirmed, memo = self._stop_confirm_dialog.ask()
             if not confirmed:
-                if was_break_dialog_open:
-                    self._break_dialog.raise_()
-                    self._break_dialog.activateWindow()
                 return
 
             end_reason = memo if memo else "stopped"
             self._break_dialog.hide()
+            self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
             self._timer_controller.stop_work(end_reason=end_reason)
             self._update_action_state()
@@ -129,6 +133,7 @@ class TrayController:
         try:
             _ = checked
             self._break_dialog.hide()
+            self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
             self._timer_controller.resume_work()
             self._update_action_state()
@@ -183,6 +188,11 @@ class TrayController:
                 end_confirm_message=self._config.messages["end_confirm"],
                 min_break_seconds=self._config.min_break_seconds,
                 idle_tracker=self._idle_tracker,
+                on_break_satisfied=self._on_break_satisfied,
+            )
+            self._effect_manager.update_settings(
+                enabled=self._config.effects_enabled,
+                overlay_text=self._config.messages["break_normal"],
             )
             self._stop_confirm_dialog = EndWorkConfirmDialog(
                 end_confirm_message=self._config.messages["end_confirm"],
@@ -202,6 +212,7 @@ class TrayController:
         try:
             _ = checked
             self._break_dialog.hide()
+            self._effect_manager.hide_break_effect()
             self._tray_icon.hide()
             self._app.quit()
         except Exception:
@@ -222,6 +233,7 @@ class TrayController:
         try:
             self._is_break_dialog_open = True
             self._update_action_state()
+            self._effect_manager.show_break_effect()
             self._break_dialog.open_prompt(BreakDialog.MESSAGE_NORMAL)
         except Exception:
             traceback.print_exc()
@@ -230,6 +242,7 @@ class TrayController:
         """Apply user decision from break dialog."""
         try:
             self._is_break_dialog_open = False
+            self._effect_manager.hide_break_effect()
             if action == BreakDialog.ACTION_BREAK_DONE:
                 self._timer_controller.resume_work()
             elif action == BreakDialog.ACTION_END_WORK:
@@ -238,6 +251,10 @@ class TrayController:
             self._update_action_state()
         except Exception:
             traceback.print_exc()
+
+    def _on_break_satisfied(self) -> None:
+        """Hide overlay once break requirement is satisfied."""
+        self._effect_manager.hide_break_effect()
 
     def _update_action_state(self) -> None:
         """Update menu labels and enabled states according to app state."""

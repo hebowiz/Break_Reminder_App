@@ -8,6 +8,7 @@ from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QVBoxLayout
 from app.infra.idle_tracker import IdleTracker
+from app.ui.screen_utils import get_screen_at_cursor
 
 
 class EndWorkConfirmDialog(QDialog):
@@ -25,9 +26,6 @@ class EndWorkConfirmDialog(QDialog):
         self._confirmed = False
         if self._memo_input is not None:
             self._memo_input.clear()
-        self.show()
-        self.raise_()
-        self.activateWindow()
         self.exec()
         memo = ""
         if self._memo_input is not None:
@@ -103,9 +101,11 @@ class BreakDialog(QDialog):
         end_confirm_message: str,
         min_break_seconds: int,
         idle_tracker: IdleTracker | None = None,
+        on_break_satisfied: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(None)
         self._on_decision = on_decision
+        self._on_break_satisfied = on_break_satisfied
         self._break_normal_message = break_normal_message
         self._break_too_short_message = break_too_short_message
         self._min_break_seconds = max(1, int(min_break_seconds))
@@ -135,8 +135,10 @@ class BreakDialog(QDialog):
         self._refresh_idle_info()
         if not self._idle_timer.isActive():
             self._idle_timer.start()
+        self._place_on_cursor_screen()
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.show()
+        self.raise_()
 
     def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
         """Stop sampling loop when dialog is hidden."""
@@ -209,11 +211,7 @@ class BreakDialog(QDialog):
             self._fallback_elapsed_seconds += 1
             remaining = max(0, self._min_break_seconds - self._fallback_elapsed_seconds)
             if self._fallback_elapsed_seconds >= self._min_break_seconds:
-                self._break_satisfied = True
-                self._idle_timer.stop()
-                self._idle_label.setText("休憩OKです。作業を再開できます。")
-                if self._break_done_button is not None:
-                    self._break_done_button.setEnabled(True)
+                self._mark_break_satisfied()
                 return
             self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
             return
@@ -224,11 +222,7 @@ class BreakDialog(QDialog):
             self._fallback_elapsed_seconds += 1
             remaining = max(0, self._min_break_seconds - self._fallback_elapsed_seconds)
             if self._fallback_elapsed_seconds >= self._min_break_seconds:
-                self._break_satisfied = True
-                self._idle_timer.stop()
-                self._idle_label.setText("休憩OKです。作業を再開できます。")
-                if self._break_done_button is not None:
-                    self._break_done_button.setEnabled(True)
+                self._mark_break_satisfied()
                 return
             self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
             return
@@ -236,11 +230,7 @@ class BreakDialog(QDialog):
         idle_int = max(0, int(idle_seconds))
         remaining = max(0, self._min_break_seconds - idle_int)
         if idle_int >= self._min_break_seconds:
-            self._break_satisfied = True
-            self._idle_timer.stop()
-            self._idle_label.setText("休憩OKです。作業を再開できます。")
-            if self._break_done_button is not None:
-                self._break_done_button.setEnabled(True)
+            self._mark_break_satisfied()
             return
         self._idle_label.setText(f"休憩判定まで：あと {remaining} 秒")
 
@@ -254,11 +244,33 @@ class BreakDialog(QDialog):
         self.hide()
         self._on_decision(action, memo)
 
+    def _mark_break_satisfied(self) -> None:
+        """Latch break-satisfied state and notify observer once."""
+        if self._break_satisfied:
+            return
+        self._break_satisfied = True
+        self._idle_timer.stop()
+        if self._idle_label is not None:
+            self._idle_label.setText("休憩OKです。作業を再開できます。")
+        if self._break_done_button is not None:
+            self._break_done_button.setEnabled(True)
+        if self._on_break_satisfied is not None:
+            self._on_break_satisfied()
+
     def _confirm_end_work(self) -> None:
         """Ask for confirmation before ending today's work."""
         confirmed, memo = self._confirm_dialog.ask()
         if confirmed:
             self._decide(self.ACTION_END_WORK, memo)
             return
-        self.raise_()
-        self.activateWindow()
+
+    def _place_on_cursor_screen(self) -> None:
+        """Place dialog near center of the screen where cursor is located."""
+        screen = get_screen_at_cursor()
+        if screen is None:
+            return
+        target_rect = screen.geometry()
+        self.adjustSize()
+        x = target_rect.x() + (target_rect.width() - self.width()) // 2
+        y = target_rect.y() + (target_rect.height() - self.height()) // 2
+        self.move(x, y)
