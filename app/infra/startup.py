@@ -52,6 +52,8 @@ def create_startup_shortcut(app_root: Path | None = None) -> bool:
             check=True,
             capture_output=True,
             text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            startupinfo=_hidden_startupinfo(),
         )
         return shortcut_path.exists()
     except Exception:
@@ -124,3 +126,14 @@ def _ps_quote_raw(value: str) -> str:
 def _default_app_root() -> Path:
     """Resolve repository root from this module location."""
     return Path(__file__).resolve().parents[2]
+
+
+def _hidden_startupinfo() -> subprocess.STARTUPINFO | None:
+    """Return hidden-window startup info for Windows subprocess."""
+    startupinfo_cls = getattr(subprocess, "STARTUPINFO", None)
+    if startupinfo_cls is None:
+        return None
+    startupinfo = startupinfo_cls()
+    startupinfo.dwFlags |= getattr(subprocess, "STARTF_USESHOWWINDOW", 0)
+    startupinfo.wShowWindow = 0
+    return startupinfo
