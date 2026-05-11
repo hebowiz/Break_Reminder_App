@@ -113,6 +113,7 @@ class TrayController:
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
             self._timer_controller.start_work()
+            self._show_work_started_notification()
             self._update_action_state()
         except Exception:
             traceback.print_exc()
@@ -142,6 +143,7 @@ class TrayController:
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
             self._timer_controller.resume_work()
+            self._show_work_started_notification()
             self._update_action_state()
         except Exception:
             traceback.print_exc()
@@ -258,6 +260,7 @@ class TrayController:
             self._effect_manager.hide_break_effect()
             if action == BreakDialog.ACTION_BREAK_DONE:
                 self._timer_controller.resume_work()
+                self._show_work_started_notification()
             elif action == BreakDialog.ACTION_END_WORK:
                 end_reason = memo if memo else "user_ended"
                 self._timer_controller.stop_work(end_reason=end_reason)
@@ -295,6 +298,20 @@ class TrayController:
         """Use a standard Qt icon to guarantee tray visibility in MVP."""
         style = self._app.style()
         return style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+
+    def _show_work_started_notification(self) -> None:
+        """Show a short tray notification when work has started."""
+        tray_icon = getattr(self, "_tray_icon", None)
+        if tray_icon is None or not tray_icon.isVisible():
+            return
+
+        work_minutes = max(1, int(self._config.work_minutes))
+        tray_icon.showMessage(
+            "作業開始",
+            f"次の休憩: {work_minutes}分後",
+            QSystemTrayIcon.MessageIcon.Information,
+            4000,
+        )
 
     def _create_logger(self) -> SQLiteLogger | None:
         """Create SQLite logger. Return None when initialization fails."""
