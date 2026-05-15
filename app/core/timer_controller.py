@@ -29,6 +29,7 @@ class TimerController:
         self._notifier = notifier
 
         self._state = AppState.STOPPED
+        self.current_work_duration_minutes = self._work_minutes
         self._break_started_at: float | None = None
         self._notification_shown_at: float | None = None
         self._active_session_id: int | None = None
@@ -42,9 +43,13 @@ class TimerController:
         """Return current app state."""
         return self._state
 
-    def start_work(self) -> None:
+    def start_work(self, work_minutes: int | None = None) -> None:
         """Start a work session timer."""
-        self._start_work_timer(self._work_minutes)
+        self.current_work_duration_minutes = max(
+            1,
+            int(self._work_minutes if work_minutes is None else work_minutes),
+        )
+        self._start_work_timer(self.current_work_duration_minutes)
         self._break_started_at = None
         self._notification_shown_at = None
         self._state = AppState.WORKING
@@ -74,11 +79,11 @@ class TimerController:
         self._notification_shown_at = now
         self._state = AppState.BREAKING
 
-    def resume_work(self) -> None:
+    def resume_work(self, work_minutes: int | None = None) -> None:
         """Resume work by starting a new configured work session."""
         if self._logger is not None and self._active_session_id is not None:
             self._logger.mark_work_resumed(self._active_session_id)
-        self.start_work()
+        self.start_work(work_minutes)
 
     def get_break_elapsed_seconds(self) -> int:
         """Return elapsed break seconds since latest break start."""

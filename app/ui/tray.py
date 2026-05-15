@@ -17,7 +17,7 @@ from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.infra.startup import apply_startup_setting
 from app.state import AppState
-from app.ui.break_dialog import BreakDialog, EndWorkConfirmDialog
+from app.ui.break_dialog import BreakDialog, EndWorkConfirmDialog, WorkDurationDialog
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
@@ -55,6 +55,7 @@ class TrayController:
             break_normal_message=self._config.messages["break_normal"],
             break_too_short_message=self._config.messages["break_too_short"],
             end_confirm_message=self._config.messages["end_confirm"],
+            default_work_minutes=self._config.work_minutes,
             min_break_seconds=self._config.min_break_seconds,
             idle_tracker=self._idle_tracker,
             on_break_satisfied=self._on_break_satisfied,
@@ -62,6 +63,7 @@ class TrayController:
         self._stop_confirm_dialog = EndWorkConfirmDialog(
             end_confirm_message=self._config.messages["end_confirm"],
         )
+        self._work_duration_dialog = WorkDurationDialog()
 
         self._tray_icon = QSystemTrayIcon(self._build_icon(), app)
         self._menu = QMenu()
@@ -112,7 +114,11 @@ class TrayController:
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
-            self._timer_controller.start_work()
+            accepted, work_minutes = self._work_duration_dialog.ask(self._config.work_minutes)
+            if not accepted:
+                self._update_action_state()
+                return
+            self._timer_controller.start_work(work_minutes)
             self._show_work_started_notification()
             self._update_action_state()
         except Exception:
@@ -142,7 +148,11 @@ class TrayController:
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
-            self._timer_controller.resume_work()
+            accepted, work_minutes = self._work_duration_dialog.ask(self._config.work_minutes)
+            if not accepted:
+                self._update_action_state()
+                return
+            self._timer_controller.resume_work(work_minutes)
             self._show_work_started_notification()
             self._update_action_state()
         except Exception:
@@ -194,6 +204,7 @@ class TrayController:
                 break_normal_message=self._config.messages["break_normal"],
                 break_too_short_message=self._config.messages["break_too_short"],
                 end_confirm_message=self._config.messages["end_confirm"],
+                default_work_minutes=self._config.work_minutes,
                 min_break_seconds=self._config.min_break_seconds,
                 idle_tracker=self._idle_tracker,
                 on_break_satisfied=self._on_break_satisfied,
@@ -253,13 +264,18 @@ class TrayController:
         except Exception:
             traceback.print_exc()
 
-    def _on_break_decision(self, action: str, memo: str | None = None) -> None:
+    def _on_break_decision(
+        self,
+        action: str,
+        memo: str | None = None,
+        work_minutes: int | None = None,
+    ) -> None:
         """Apply user decision from break dialog."""
         try:
             self._is_break_dialog_open = False
             self._effect_manager.hide_break_effect()
             if action == BreakDialog.ACTION_BREAK_DONE:
-                self._timer_controller.resume_work()
+                self._timer_controller.resume_work(work_minutes)
                 self._show_work_started_notification()
             elif action == BreakDialog.ACTION_END_WORK:
                 end_reason = memo if memo else "user_ended"
@@ -305,7 +321,7 @@ class TrayController:
         if tray_icon is None or not tray_icon.isVisible():
             return
 
-        work_minutes = max(1, int(self._config.work_minutes))
+        work_minutes = max(1, int(self._timer_controller.current_work_duration_minutes))
         tray_icon.showMessage(
             "作業開始",
             f"次の休憩: {work_minutes}分後",
