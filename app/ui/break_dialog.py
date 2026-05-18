@@ -160,6 +160,8 @@ class EndWorkConfirmDialog(QDialog):
 class BreakDialog(QDialog):
     """Display break prompt actions without blocking the app."""
 
+    ALREADY_IDLE_THRESHOLD_SECONDS = 30
+
     ACTION_BREAK_DONE = "break_done"
     ACTION_END_WORK = "end_work"
 
@@ -191,6 +193,8 @@ class BreakDialog(QDialog):
         self._next_break_label: QLabel | None = None
         self._break_done_button: QPushButton | None = None
         self._break_satisfied = False
+        self._was_already_idle = False
+        self._waiting_for_return_after_satisfied = False
         self._fallback_elapsed_seconds = 0
 
         self._idle_timer = QTimer(self)
@@ -205,6 +209,8 @@ class BreakDialog(QDialog):
         self._apply_message(message_kind)
         self._reset_work_duration()
         self._break_satisfied = False
+        self._was_already_idle = self._detect_already_idle()
+        self._waiting_for_return_after_satisfied = False
         self._fallback_elapsed_seconds = 0
         if self._break_done_button is not None:
             self._break_done_button.setEnabled(False)
@@ -299,6 +305,11 @@ class BreakDialog(QDialog):
             self._idle_label.setText("")
             if self._break_done_button is not None:
                 self._break_done_button.setEnabled(True)
+            if self._waiting_for_return_after_satisfied and self._has_user_returned():
+                self._waiting_for_return_after_satisfied = False
+                self._idle_timer.stop()
+                if self._on_break_satisfied is not None:
+                    self._on_break_satisfied()
             return
         if self._idle_tracker is None:
             self._fallback_elapsed_seconds += 1
@@ -345,11 +356,14 @@ class BreakDialog(QDialog):
         if self._break_satisfied:
             return
         self._break_satisfied = True
-        self._idle_timer.stop()
         if self._idle_label is not None:
             self._idle_label.setText("")
         if self._break_done_button is not None:
             self._break_done_button.setEnabled(True)
+        if self._was_already_idle:
+            self._waiting_for_return_after_satisfied = True
+            return
+        self._idle_timer.stop()
         if self._on_break_satisfied is not None:
             self._on_break_satisfied()
 
@@ -372,6 +386,23 @@ class BreakDialog(QDialog):
         if self._next_break_label is None:
             return
         self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
+
+    def _detect_already_idle(self) -> bool:
+        """Return whether user was already idle when the break prompt opened."""
+        if self._idle_tracker is None:
+            return False
+        idle_seconds = self._idle_tracker.get_system_idle_seconds()
+        if idle_seconds is None:
+            return False
+        return idle_seconds >= self.ALREADY_IDLE_THRESHOLD_SECONDS
+
+    def _has_user_returned(self) -> bool:
+        """Return whether input was detected after an already-idle break satisfied."""
+        if self._idle_tracker is None:
+            return False
+        self._idle_tracker.update()
+        idle_seconds = self._idle_tracker.get_idle_seconds()
+        return idle_seconds is not None and idle_seconds < 1
 
     def _place_on_cursor_screen(self) -> None:
         """Place dialog near center of the screen where cursor is located."""

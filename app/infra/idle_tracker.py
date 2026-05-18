@@ -13,6 +13,12 @@ class POINT(ctypes.Structure):
     _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
 
 
+class LASTINPUTINFO(ctypes.Structure):
+    """Windows LASTINPUTINFO structure."""
+
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+
 class IdleTracker:
     """Track idle seconds based on local cursor/key activity sampling."""
 
@@ -47,6 +53,10 @@ class IdleTracker:
         self._user32.GetCursorPos.restype = wintypes.BOOL
         self._user32.GetAsyncKeyState.argtypes = [wintypes.INT]
         self._user32.GetAsyncKeyState.restype = wintypes.SHORT
+        self._user32.GetLastInputInfo.argtypes = [ctypes.POINTER(LASTINPUTINFO)]
+        self._user32.GetLastInputInfo.restype = wintypes.BOOL
+        self._kernel32 = ctypes.windll.kernel32
+        self._kernel32.GetTickCount64.restype = ctypes.c_ulonglong
 
     def reset(self) -> None:
         """Reset idle counter and sampling baseline."""
@@ -88,6 +98,19 @@ class IdleTracker:
         if not self._available:
             return None
         return self._idle_seconds
+
+    def get_system_idle_seconds(self) -> float | None:
+        """Return OS-reported idle seconds since the latest user input."""
+        try:
+            info = LASTINPUTINFO()
+            info.cbSize = ctypes.sizeof(LASTINPUTINFO)
+            ok = self._user32.GetLastInputInfo(ctypes.byref(info))
+            if not ok:
+                return None
+            elapsed_ms = max(0, int(self._kernel32.GetTickCount64()) - int(info.dwTime))
+            return elapsed_ms / 1000.0
+        except Exception:
+            return None
 
     def _detect_activity(self) -> tuple[bool, tuple[int, int] | None, bool]:
         """Detect activity from cursor movement and key/button states."""
