@@ -5,9 +5,11 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
+from datetime import datetime
 
 from PySide6.QtCore import QTimer
 
+from app.core.time_utils import calculate_next_break_datetime
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
@@ -30,12 +32,14 @@ class TimerController:
 
         self._state = AppState.STOPPED
         self.current_work_duration_minutes = self._work_minutes
+        self.next_break_datetime: datetime | None = None
         self._break_started_at: float | None = None
         self._notification_shown_at: float | None = None
         self._active_session_id: int | None = None
 
         self._work_timer = QTimer()
-        self._work_timer.setSingleShot(True)
+        self._work_timer.setInterval(1000)
+        self._work_timer.setSingleShot(False)
         self._work_timer.timeout.connect(self._handle_work_timer_elapsed)
 
     @property
@@ -49,10 +53,13 @@ class TimerController:
             1,
             int(self._work_minutes if work_minutes is None else work_minutes),
         )
-        self._start_work_timer(self.current_work_duration_minutes)
+        self.next_break_datetime = calculate_next_break_datetime(
+            self.current_work_duration_minutes
+        )
         self._break_started_at = None
         self._notification_shown_at = None
         self._state = AppState.WORKING
+        self._start_work_timer()
         if self._logger is not None:
             self._active_session_id = self._logger.create_session()
 
@@ -67,6 +74,7 @@ class TimerController:
         if self._logger is not None and self._active_session_id is not None:
             self._logger.end_session(self._active_session_id, end_reason)
         self._active_session_id = None
+        self.next_break_datetime = None
         self._break_started_at = None
         self._notification_shown_at = None
         self._state = AppState.STOPPED
@@ -74,6 +82,7 @@ class TimerController:
     def break_started(self) -> None:
         """Switch to break state and reset break start time to now."""
         self._work_timer.stop()
+        self.next_break_datetime = None
         now = time.monotonic()
         self._break_started_at = now
         self._notification_shown_at = now
@@ -97,20 +106,23 @@ class TimerController:
 
     def get_remaining_seconds(self) -> int | None:
         """Return remaining seconds for active work timer, if any."""
-        if self._state != AppState.WORKING:
+        if self._state != AppState.WORKING or self.next_break_datetime is None:
             return None
-        remaining_ms = self._work_timer.remainingTime()
-        if remaining_ms < 0:
-            return None
-        return max(0, math.ceil(remaining_ms / 1000))
+        remaining_seconds = (self.next_break_datetime - datetime.now()).total_seconds()
+        return max(0, math.ceil(remaining_seconds))
 
-    def _start_work_timer(self, minutes: int) -> None:
-        """Start single-shot timer for the given minutes."""
-        duration_ms = max(1, int(minutes)) * 60 * 1000
-        self._work_timer.start(duration_ms)
+    def _start_work_timer(self) -> None:
+        """Start periodic checks against the absolute next-break datetime."""
+        self._work_timer.start()
 
     def _handle_work_timer_elapsed(self) -> None:
-        """Stop work and request break UI when timer completes."""
+        """Stop work and request break UI when the absolute target is reached."""
+        if self._state != AppState.WORKING or self.next_break_datetime is None:
+            self._work_timer.stop()
+            return
+        if datetime.now() < self.next_break_datetime:
+            return
+
         if self._logger is not None and self._active_session_id is not None:
             self._logger.mark_timer_fired(self._active_session_id)
         self.break_started()

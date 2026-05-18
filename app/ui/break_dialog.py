@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timedelta
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent
@@ -17,8 +16,14 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
 )
+from app.core.time_utils import calculate_next_break_datetime, format_clock_time
 from app.infra.idle_tracker import IdleTracker
 from app.ui.screen_utils import get_screen_at_cursor
+
+
+def format_next_break_time(minutes: int) -> str:
+    """Return the next break clock time for a work duration."""
+    return format_clock_time(calculate_next_break_datetime(minutes))
 
 
 class WorkDurationDialog(QDialog):
@@ -76,8 +81,7 @@ class WorkDurationDialog(QDialog):
         """Refresh next break time preview."""
         if self._next_break_label is None:
             return
-        next_break_at = datetime.now() + timedelta(minutes=max(1, int(minutes)))
-        self._next_break_label.setText(f"次の休憩: {next_break_at:%H:%M}")
+        self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
 
 
 class EndWorkConfirmDialog(QDialog):
@@ -367,8 +371,7 @@ class BreakDialog(QDialog):
         """Refresh next break time preview."""
         if self._next_break_label is None:
             return
-        next_break_at = datetime.now() + timedelta(minutes=max(1, int(minutes)))
-        self._next_break_label.setText(f"次の休憩: {next_break_at:%H:%M}")
+        self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
 
     def _place_on_cursor_screen(self) -> None:
         """Place dialog near center of the screen where cursor is located."""

@@ -9,6 +9,7 @@ from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemTrayIcon
 
 from app.config import AppConfig, load_config
+from app.core.time_utils import format_clock_time
 from app.core.timer_controller import TimerController
 from app.effects.effect_manager import EffectManager
 from app.infra.hotkey import GlobalHotkeyManager
@@ -17,7 +18,11 @@ from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.infra.startup import apply_startup_setting
 from app.state import AppState
-from app.ui.break_dialog import BreakDialog, EndWorkConfirmDialog, WorkDurationDialog
+from app.ui.break_dialog import (
+    BreakDialog,
+    EndWorkConfirmDialog,
+    WorkDurationDialog,
+)
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
@@ -322,9 +327,13 @@ class TrayController:
             return
 
         work_minutes = max(1, int(self._timer_controller.current_work_duration_minutes))
+        next_break_datetime = self._timer_controller.next_break_datetime
+        if next_break_datetime is None:
+            return
+        next_break_time = format_clock_time(next_break_datetime)
         tray_icon.showMessage(
             "作業開始",
-            f"次の休憩: {work_minutes}分後",
+            f"次の休憩: {work_minutes}分後 ({next_break_time})",
             QSystemTrayIcon.MessageIcon.Information,
             4000,
         )
