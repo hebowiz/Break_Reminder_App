@@ -23,6 +23,7 @@ from app.ui.break_dialog import (
     EndWorkConfirmDialog,
     WorkDurationDialog,
 )
+from app.ui.condition_dialog import ConditionInput, ConditionInputDialog
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
@@ -44,6 +45,7 @@ class TrayController:
             effect_image_path=self._config.effect_image_path,
         )
         self._log_viewer: LogViewerDialog | None = None
+        self._last_condition_input: ConditionInput | None = None
 
         self._timer_controller = TimerController(
             work_minutes=self._config.work_minutes,
@@ -64,6 +66,7 @@ class TrayController:
             min_break_seconds=self._config.min_break_seconds,
             idle_tracker=self._idle_tracker,
             on_break_satisfied=self._on_break_satisfied,
+            on_condition_input=self.show_condition_input,
         )
         self._stop_confirm_dialog = EndWorkConfirmDialog(
             end_confirm_message=self._config.messages["end_confirm"],
@@ -76,6 +79,7 @@ class TrayController:
         self._start_or_resume_action = QAction("作業開始", self._menu)
         self._stop_action = QAction("作業停止", self._menu)
         self._status_action = QAction("状態表示", self._menu)
+        self._condition_action = QAction("体調入力", self._menu)
         self._show_logs_action = QAction("ログを表示", self._menu)
         self._settings_action = QAction("設定", self._menu)
         self._quit_action = QAction("終了", self._menu)
@@ -92,6 +96,9 @@ class TrayController:
         )
         self._stop_action.triggered.connect(lambda checked=False: self.stop_work(checked))
         self._status_action.triggered.connect(lambda checked=False: self.show_status(checked))
+        self._condition_action.triggered.connect(
+            lambda checked=False: self.show_condition_input(checked)
+        )
         self._settings_action.triggered.connect(lambda checked=False: self.show_settings(checked))
         self._show_logs_action.triggered.connect(lambda checked=False: self.show_logs(checked))
         self._quit_action.triggered.connect(lambda checked=False: self.quit_app(checked))
@@ -100,6 +107,7 @@ class TrayController:
         self._menu.addAction(self._stop_action)
         self._menu.addSeparator()
         self._menu.addAction(self._status_action)
+        self._menu.addAction(self._condition_action)
         self._menu.addAction(self._settings_action)
         self._menu.addAction(self._show_logs_action)
         self._menu.addSeparator()
@@ -171,6 +179,16 @@ class TrayController:
         except Exception:
             traceback.print_exc()
 
+    def show_condition_input(self, checked: bool = False) -> None:
+        """Open lightweight condition input dialog."""
+        try:
+            _ = checked
+            dialog = ConditionInputDialog()
+            if dialog.exec() == ConditionInputDialog.DialogCode.Accepted:
+                self._last_condition_input = dialog.condition_input
+        except Exception:
+            traceback.print_exc()
+
     def show_logs(self, checked: bool = False) -> None:
         """Open app-internal log viewer dialog."""
         try:
@@ -213,6 +231,7 @@ class TrayController:
                 min_break_seconds=self._config.min_break_seconds,
                 idle_tracker=self._idle_tracker,
                 on_break_satisfied=self._on_break_satisfied,
+                on_condition_input=self.show_condition_input,
             )
             self._effect_manager.update_settings(
                 enabled=self._config.effects_enabled,

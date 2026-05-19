@@ -178,10 +178,12 @@ class BreakDialog(QDialog):
         min_break_seconds: int,
         idle_tracker: IdleTracker | None = None,
         on_break_satisfied: Callable[[], None] | None = None,
+        on_condition_input: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(None)
         self._on_decision = on_decision
         self._on_break_satisfied = on_break_satisfied
+        self._on_condition_input = on_condition_input
         self._break_normal_message = break_normal_message
         self._break_too_short_message = break_too_short_message
         self._default_work_minutes = max(1, int(default_work_minutes))
@@ -272,17 +274,20 @@ class BreakDialog(QDialog):
         layout.addLayout(duration_form)
 
         break_done_button = QPushButton("作業再開", self)
+        condition_button = QPushButton("体調入力", self)
         end_work_button = QPushButton("今日は終了", self)
 
-        for button in (break_done_button, end_work_button):
+        for button in (break_done_button, condition_button, end_work_button):
             button.setAutoDefault(False)
             button.setDefault(False)
 
         break_done_button.clicked.connect(lambda: self._decide(self.ACTION_BREAK_DONE))
+        condition_button.clicked.connect(self._open_condition_input)
         end_work_button.clicked.connect(self._confirm_end_work)
         self._break_done_button = break_done_button
 
         layout.addWidget(break_done_button)
+        layout.addWidget(condition_button)
         layout.addWidget(end_work_button)
 
         self._apply_message(self.MESSAGE_NORMAL)
@@ -373,6 +378,11 @@ class BreakDialog(QDialog):
         if confirmed:
             self._decide(self.ACTION_END_WORK, memo)
             return
+
+    def _open_condition_input(self) -> None:
+        """Open condition input without changing the break dialog lifecycle."""
+        if self._on_condition_input is not None:
+            self._on_condition_input()
 
     def _reset_work_duration(self) -> None:
         """Reset work duration input to settings default."""
