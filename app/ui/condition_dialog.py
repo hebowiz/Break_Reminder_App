@@ -178,7 +178,6 @@ class ConditionInputDialog(QDialog):
         other_text = ""
         other_checkbox = self._symptom_checks.get("その他")
         if other_checkbox is not None and other_checkbox.isChecked():
-            symptoms.append("その他")
             if self._other_text is not None:
                 other_text = self._other_text.text().strip()
 

@@ -12,6 +12,7 @@ from app.config import AppConfig, load_config
 from app.core.time_utils import format_clock_time
 from app.core.timer_controller import TimerController
 from app.effects.effect_manager import EffectManager
+from app.infra.condition_logger import append_condition_log, build_condition_log_record
 from app.infra.hotkey import GlobalHotkeyManager
 from app.infra.idle_tracker import IdleTracker
 from app.infra.logger import SQLiteLogger
@@ -186,6 +187,19 @@ class TrayController:
             dialog = ConditionInputDialog()
             if dialog.exec() == ConditionInputDialog.DialogCode.Accepted:
                 self._last_condition_input = dialog.condition_input
+                record = build_condition_log_record(
+                    condition=self._last_condition_input.condition_score,
+                    mood=self._last_condition_input.mood_score,
+                    energy=self._last_condition_input.energy_score,
+                    symptoms=self._last_condition_input.symptoms,
+                    other_symptom=self._last_condition_input.other_text,
+                )
+                if not append_condition_log(record):
+                    QMessageBox.warning(
+                        None,
+                        "保存エラー",
+                        "体調入力ログの保存に失敗しました。",
+                    )
         except Exception:
             traceback.print_exc()
 

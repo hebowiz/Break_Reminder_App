@@ -11,3 +11,4 @@ build/
 logs.db
 config.json
 data/logs.db
+data/condition_log.jsonl
