@@ -62,6 +62,7 @@ class SettingsDialog(QDialog):
 
         self._effects_enabled = QCheckBox("演出を有効化（未実装）", self)
         self._effects_enabled.setText("演出を有効化")
+        self._status_widget_enabled = QCheckBox("状態ウィジェットを表示", self)
 
         self._effect_image_path = QLineEdit(self)
         self._effect_image_path.setPlaceholderText("画像ファイルを選択（任意）")
@@ -89,6 +90,7 @@ class SettingsDialog(QDialog):
         form.addRow("通知レベル", self._notification_level)
         form.addRow("演出", self._effects_enabled)
         form.addRow("演出画像", image_path_container)
+        form.addRow("状態ウィジェット", self._status_widget_enabled)
         form.addRow("自動起動", self._start_with_windows)
         form.addRow("ショートカット", self._hotkey_enabled)
         form.addRow("開始ホットキー", self._hotkey_start_work)
@@ -116,6 +118,7 @@ class SettingsDialog(QDialog):
 
         self._effects_enabled.setChecked(config.effects_enabled)
         self._effect_image_path.setText(config.effect_image_path)
+        self._status_widget_enabled.setChecked(config.status_widget_enabled)
         self._start_with_windows.setChecked(config.start_with_windows)
         self._hotkey_enabled.setChecked(config.hotkey_enabled)
         self._hotkey_start_work.setText(config.hotkey_start_work)
@@ -131,6 +134,7 @@ class SettingsDialog(QDialog):
             notification_level=int(self._notification_level.currentData()),
             effects_enabled=bool(self._effects_enabled.isChecked()),
             effect_image_path=self._effect_image_path.text().strip(),
+            status_widget_enabled=bool(self._status_widget_enabled.isChecked()),
             start_with_windows=bool(self._start_with_windows.isChecked()),
             hotkey_enabled=bool(self._hotkey_enabled.isChecked()),
             hotkey_start_work=self._hotkey_start_work.text().strip() or "Ctrl+Alt+B",

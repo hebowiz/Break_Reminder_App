@@ -28,6 +28,7 @@ from app.ui.condition_dialog import ConditionInput, ConditionInputDialog
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
+from app.ui.status_widget import StatusWidget
 
 
 class TrayController:
@@ -57,6 +58,11 @@ class TrayController:
         self._status_popup = StatusPopup(
             state_provider=lambda: self._timer_controller.state,
             remaining_provider=self._timer_controller.get_remaining_seconds,
+        )
+        self._status_widget = StatusWidget(
+            state_provider=lambda: self._timer_controller.state,
+            next_break_provider=lambda: self._timer_controller.next_break_datetime,
+            enabled=self._config.status_widget_enabled,
         )
         self._break_dialog = BreakDialog(
             on_decision=self._on_break_decision,
@@ -120,6 +126,7 @@ class TrayController:
         self._apply_windows_startup(notify=False)
         self._apply_hotkey_settings(notify=False)
         self._update_action_state()
+        self._status_widget.refresh()
 
     def start_work(self, checked: bool = False) -> None:
         """Start work timer via TimerController."""
@@ -135,6 +142,7 @@ class TrayController:
             self._timer_controller.start_work(work_minutes)
             self._show_work_started_notification()
             self._update_action_state()
+            self._status_widget.refresh()
         except Exception:
             traceback.print_exc()
 
@@ -152,6 +160,7 @@ class TrayController:
             self._is_break_dialog_open = False
             self._timer_controller.stop_work(end_reason=end_reason)
             self._update_action_state()
+            self._status_widget.refresh()
         except Exception:
             traceback.print_exc()
 
@@ -169,6 +178,7 @@ class TrayController:
             self._timer_controller.resume_work(work_minutes)
             self._show_work_started_notification()
             self._update_action_state()
+            self._status_widget.refresh()
         except Exception:
             traceback.print_exc()
 
@@ -236,6 +246,7 @@ class TrayController:
                 work_minutes=self._config.work_minutes,
                 notifier=self._notifier,
             )
+            self._status_widget.set_enabled(self._config.status_widget_enabled)
             self._break_dialog = BreakDialog(
                 on_decision=self._on_break_decision,
                 break_normal_message=self._config.messages["break_normal"],
@@ -272,6 +283,7 @@ class TrayController:
             _ = checked
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
+            self._status_widget.hide()
             self._hotkey_manager.shutdown()
             self._tray_icon.hide()
             self._app.quit()
@@ -299,6 +311,7 @@ class TrayController:
             )
             self._effect_manager.show_break_effect(effect_image_path=self._config.effect_image_path)
             self._break_dialog.open_prompt(BreakDialog.MESSAGE_NORMAL)
+            self._status_widget.refresh()
         except Exception:
             traceback.print_exc()
 
@@ -319,6 +332,7 @@ class TrayController:
                 end_reason = memo if memo else "user_ended"
                 self._timer_controller.stop_work(end_reason=end_reason)
             self._update_action_state()
+            self._status_widget.refresh()
         except Exception:
             traceback.print_exc()
 
