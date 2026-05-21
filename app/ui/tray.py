@@ -25,6 +25,7 @@ from app.ui.break_dialog import (
     WorkDurationDialog,
 )
 from app.ui.condition_dialog import ConditionInput, ConditionInputDialog
+from app.ui.condition_log_viewer import ConditionLogViewerDialog
 from app.ui.log_viewer import LogViewerDialog
 from app.ui.settings_dialog import SettingsDialog
 from app.ui.status_popup import StatusPopup
@@ -47,6 +48,7 @@ class TrayController:
             effect_image_path=self._config.effect_image_path,
         )
         self._log_viewer: LogViewerDialog | None = None
+        self._condition_log_viewer: ConditionLogViewerDialog | None = None
         self._last_condition_input: ConditionInput | None = None
 
         self._timer_controller = TimerController(
@@ -87,6 +89,7 @@ class TrayController:
         self._stop_action = QAction("作業停止", self._menu)
         self._status_action = QAction("状態表示", self._menu)
         self._condition_action = QAction("体調入力", self._menu)
+        self._show_condition_logs_action = QAction("体調ログ", self._menu)
         self._show_logs_action = QAction("ログを表示", self._menu)
         self._settings_action = QAction("設定", self._menu)
         self._quit_action = QAction("終了", self._menu)
@@ -106,6 +109,9 @@ class TrayController:
         self._condition_action.triggered.connect(
             lambda checked=False: self.show_condition_input(checked)
         )
+        self._show_condition_logs_action.triggered.connect(
+            lambda checked=False: self.show_condition_logs(checked)
+        )
         self._settings_action.triggered.connect(lambda checked=False: self.show_settings(checked))
         self._show_logs_action.triggered.connect(lambda checked=False: self.show_logs(checked))
         self._quit_action.triggered.connect(lambda checked=False: self.quit_app(checked))
@@ -115,6 +121,7 @@ class TrayController:
         self._menu.addSeparator()
         self._menu.addAction(self._status_action)
         self._menu.addAction(self._condition_action)
+        self._menu.addAction(self._show_condition_logs_action)
         self._menu.addAction(self._settings_action)
         self._menu.addAction(self._show_logs_action)
         self._menu.addSeparator()
@@ -226,6 +233,19 @@ class TrayController:
             self._log_viewer.show()
             self._log_viewer.raise_()
             self._log_viewer.activateWindow()
+        except Exception:
+            traceback.print_exc()
+
+    def show_condition_logs(self, checked: bool = False) -> None:
+        """Open condition log viewer dialog."""
+        try:
+            _ = checked
+            if self._condition_log_viewer is None:
+                self._condition_log_viewer = ConditionLogViewerDialog()
+            self._condition_log_viewer.refresh()
+            self._condition_log_viewer.show()
+            self._condition_log_viewer.raise_()
+            self._condition_log_viewer.activateWindow()
         except Exception:
             traceback.print_exc()
 

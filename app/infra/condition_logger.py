@@ -55,6 +55,33 @@ def append_condition_log(
         return False
 
 
+def load_condition_logs(path: Path | None = None) -> list[ConditionLogRecord]:
+    """Load condition log JSONL records sorted by timestamp descending."""
+    log_path = path or DEFAULT_CONDITION_LOG_PATH
+    if not log_path.exists():
+        return []
+
+    records: list[ConditionLogRecord] = []
+    try:
+        with log_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                raw = json.loads(line)
+                if isinstance(raw, dict):
+                    records.append(raw)
+    except Exception:
+        traceback.print_exc()
+        return []
+
+    return sorted(
+        records,
+        key=lambda record: str(record.get("timestamp", "")),
+        reverse=True,
+    )
+
+
 def _clamp_score(value: int) -> int:
     """Clamp a score to the 0..100 range."""
     return max(0, min(100, int(value)))
