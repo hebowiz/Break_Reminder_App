@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent
+from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent, QShowEvent
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -41,11 +41,17 @@ class WorkDurationDialog(QDialog):
         if self._duration_spin is not None:
             self._duration_spin.setValue(default_value)
         self._update_next_break_time(default_value)
+        QTimer.singleShot(0, self._activate_for_input)
         accepted = self.exec() == QDialog.DialogCode.Accepted
         minutes = default_value
         if self._duration_spin is not None:
             minutes = int(self._duration_spin.value())
         return accepted, minutes
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        """Bring the dialog forward and focus the input when shown."""
+        super().showEvent(event)
+        self._activate_for_input()
 
     def _setup_ui(self) -> None:
         """Build work duration input UI."""
@@ -76,6 +82,14 @@ class WorkDurationDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def _activate_for_input(self) -> None:
+        """Make this dialog active and focus the duration input."""
+        self.raise_()
+        self.activateWindow()
+        if self._duration_spin is not None:
+            self._duration_spin.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+            self._duration_spin.selectAll()
 
     def _update_next_break_time(self, minutes: int) -> None:
         """Refresh next break time preview."""
