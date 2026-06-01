@@ -208,8 +208,8 @@ class TrayController:
                     condition=self._last_condition_input.condition_score,
                     mood=self._last_condition_input.mood_score,
                     energy=self._last_condition_input.energy_score,
+                    comment=self._last_condition_input.comment,
                     symptoms=self._last_condition_input.symptoms,
-                    other_symptom=self._last_condition_input.other_text,
                 )
                 if not append_condition_log(record):
                     QMessageBox.warning(

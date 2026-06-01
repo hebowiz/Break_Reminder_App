@@ -19,8 +19,8 @@ def build_condition_log_record(
     condition: int,
     mood: int,
     energy: int,
+    comment: str,
     symptoms: list[str],
-    other_symptom: str,
     timestamp: datetime | None = None,
 ) -> ConditionLogRecord:
     """Build one JSON-serializable condition log record."""
@@ -31,8 +31,8 @@ def build_condition_log_record(
         "condition": _clamp_score(condition),
         "mood": _clamp_score(mood),
         "energy": _clamp_score(energy),
-        "symptoms": [str(symptom) for symptom in symptoms if symptom != "その他"],
-        "other_symptom": str(other_symptom or ""),
+        "comment": str(comment or ""),
+        "symptoms": normalize_symptoms(symptoms),
         "source": SOURCE,
         "notion_synced": False,
     }
@@ -80,6 +80,40 @@ def load_condition_logs(path: Path | None = None) -> list[ConditionLogRecord]:
         key=lambda record: str(record.get("timestamp", "")),
         reverse=True,
     )
+
+
+def get_record_symptoms(record: ConditionLogRecord) -> list[str]:
+    """Return normalized symptoms, including legacy other_symptom values."""
+    symptoms = record.get("symptoms")
+    symptom_values = symptoms if isinstance(symptoms, list) else []
+    return normalize_symptoms(
+        [*symptom_values, *split_symptom_text(record.get("other_symptom"))]
+    )
+
+
+def normalize_symptoms(symptoms: list[object]) -> list[str]:
+    """Normalize symptom values while preserving order and removing duplicates."""
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for symptom in symptoms:
+        for item in split_symptom_text(symptom):
+            if item == "その他" or item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+    return normalized
+
+
+def split_symptom_text(value: object) -> list[str]:
+    """Split free-text symptoms by half-width or Japanese commas."""
+    if value is None:
+        return []
+    return [
+        item.strip()
+        for chunk in str(value).split(",")
+        for item in chunk.split("、")
+        if item.strip()
+    ]
 
 
 def _clamp_score(value: int) -> int:

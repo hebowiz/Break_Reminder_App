@@ -17,7 +17,11 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from app.infra.condition_logger import ConditionLogRecord, load_condition_logs
+from app.infra.condition_logger import (
+    ConditionLogRecord,
+    get_record_symptoms,
+    load_condition_logs,
+)
 
 
 class ConditionLogViewerDialog(QDialog):
@@ -42,7 +46,7 @@ class ConditionLogViewerDialog(QDialog):
                 self._set_cell(row_index, 2, self._to_text(record.get("mood")))
                 self._set_cell(row_index, 3, self._to_text(record.get("energy")))
                 self._set_cell(row_index, 4, self._format_symptoms(record))
-                self._set_cell(row_index, 5, self._to_text(record.get("other_symptom")))
+                self._set_cell(row_index, 5, self._to_text(record.get("comment")))
             self._table.resizeColumnsToContents()
         except Exception:
             traceback.print_exc()
@@ -55,7 +59,7 @@ class ConditionLogViewerDialog(QDialog):
 
         self._table.setColumnCount(6)
         self._table.setHorizontalHeaderLabels(
-            ["日時", "体調", "気分", "余力", "不調項目", "その他"]
+            ["日時", "体調", "気分", "余力", "不調項目", "コメント"]
         )
         self._table.verticalHeader().setVisible(False)
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -109,8 +113,6 @@ class ConditionLogViewerDialog(QDialog):
 
     @classmethod
     def _format_symptoms(cls, record: ConditionLogRecord) -> str:
-        """Format symptom arrays as comma-separated text."""
-        symptoms = record.get("symptoms")
-        if not isinstance(symptoms, list):
-            return ""
+        """Format normalized symptoms as comma-separated text."""
+        symptoms = get_record_symptoms(record)
         return ", ".join(cls._to_text(symptom) for symptom in symptoms)

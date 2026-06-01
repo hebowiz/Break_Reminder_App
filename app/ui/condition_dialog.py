@@ -19,6 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.infra.condition_logger import normalize_symptoms, split_symptom_text
+
 
 SYMPTOM_ITEMS = [
     "IBS",
@@ -46,8 +48,8 @@ class ConditionInput:
     condition_score: int = 50
     mood_score: int = 50
     energy_score: int = 50
+    comment: str = ""
     symptoms: list[str] = field(default_factory=list)
-    other_text: str = ""
 
 
 class ConditionInputDialog(QDialog):
@@ -58,6 +60,7 @@ class ConditionInputDialog(QDialog):
         self._sliders: dict[str, QSlider] = {}
         self._value_labels: dict[str, QLabel] = {}
         self._symptom_checks: dict[str, QCheckBox] = {}
+        self._comment_input: QLineEdit | None = None
         self._other_text: QLineEdit | None = None
         self._condition_input = ConditionInput()
         self._setup_ui()
@@ -77,6 +80,7 @@ class ConditionInputDialog(QDialog):
         layout.addWidget(self._build_score_row("mood_score", "気分"))
         layout.addWidget(self._build_score_row("energy_score", "余力"))
         layout.addWidget(self._build_symptoms_group())
+        layout.addWidget(self._build_comment_row())
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -116,6 +120,20 @@ class ConditionInputDialog(QDialog):
         layout.addWidget(label)
         layout.addWidget(slider, 1)
         layout.addWidget(value_label)
+        return container
+
+    def _build_comment_row(self) -> QWidget:
+        """Build short free-text comment input."""
+        container = QWidget(self)
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        label = QLabel("コメント", self)
+        label.setMinimumWidth(48)
+        self._comment_input = QLineEdit(self)
+
+        layout.addWidget(label)
+        layout.addWidget(self._comment_input, 1)
         return container
 
     def _build_symptoms_group(self) -> QGroupBox:
@@ -180,12 +198,13 @@ class ConditionInputDialog(QDialog):
         if other_checkbox is not None and other_checkbox.isChecked():
             if self._other_text is not None:
                 other_text = self._other_text.text().strip()
+        symptoms = normalize_symptoms([*symptoms, *split_symptom_text(other_text)])
 
         self._condition_input = ConditionInput(
             condition_score=int(self._sliders["condition_score"].value()),
             mood_score=int(self._sliders["mood_score"].value()),
             energy_score=int(self._sliders["energy_score"].value()),
+            comment=self._comment_input.text().strip() if self._comment_input is not None else "",
             symptoms=symptoms,
-            other_text=other_text,
         )
         self.accept()
