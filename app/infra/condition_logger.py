@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import threading
 import traceback
+import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +16,14 @@ CONDITION_LOG_VERSION = 1
 DEFAULT_CONDITION_LOG_PATH = Path("data") / "condition_log.jsonl"
 SOURCE = "break_reminder"
 ConditionLogRecord = dict[str, Any]
+_CONDITION_LOG_LOCK = threading.RLock()
+
+
+@contextmanager
+def condition_log_transaction():
+    """Prevent appends from racing with a full-file synchronization update."""
+    with _CONDITION_LOG_LOCK:
+        yield
 
 
 def build_condition_log_record(
@@ -34,6 +45,7 @@ def build_condition_log_record(
         "comment": str(comment or ""),
         "symptoms": normalize_symptoms(symptoms),
         "source": SOURCE,
+        "notion_sync_id": uuid.uuid4().hex,
         "notion_synced": False,
     }
 
@@ -45,10 +57,11 @@ def append_condition_log(
     """Append one condition record as a UTF-8 JSON Lines entry."""
     log_path = path or DEFAULT_CONDITION_LOG_PATH
     try:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with log_path.open("a", encoding="utf-8", newline="\n") as fh:
-            json.dump(record, fh, ensure_ascii=False, separators=(",", ":"))
-            fh.write("\n")
+        with _CONDITION_LOG_LOCK:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8", newline="\n") as fh:
+                json.dump(record, fh, ensure_ascii=False, separators=(",", ":"))
+                fh.write("\n")
         return True
     except Exception:
         traceback.print_exc()
@@ -80,6 +93,46 @@ def load_condition_logs(path: Path | None = None) -> list[ConditionLogRecord]:
         key=lambda record: str(record.get("timestamp", "")),
         reverse=True,
     )
+
+
+def load_condition_logs_in_file_order(
+    path: Path | None = None,
+) -> list[ConditionLogRecord]:
+    """Load valid condition records without changing their on-disk order."""
+    log_path = path or DEFAULT_CONDITION_LOG_PATH
+    if not log_path.exists():
+        return []
+
+    records: list[ConditionLogRecord] = []
+    try:
+        with log_path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                raw = json.loads(line)
+                if isinstance(raw, dict):
+                    records.append(raw)
+    except Exception:
+        traceback.print_exc()
+        return []
+    return records
+
+
+def replace_condition_logs(
+    records: list[ConditionLogRecord],
+    path: Path | None = None,
+) -> None:
+    """Atomically replace the JSONL file after synchronization metadata changes."""
+    log_path = path or DEFAULT_CONDITION_LOG_PATH
+    with _CONDITION_LOG_LOCK:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = log_path.with_suffix(log_path.suffix + ".tmp")
+        with temporary_path.open("w", encoding="utf-8", newline="\n") as fh:
+            for record in records:
+                json.dump(record, fh, ensure_ascii=False, separators=(",", ":"))
+                fh.write("\n")
+        temporary_path.replace(log_path)
 
 
 def get_record_symptoms(record: ConditionLogRecord) -> list[str]:

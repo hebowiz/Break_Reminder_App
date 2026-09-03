@@ -27,6 +27,9 @@ Copy-Item config.example.json config.json
 - `ntfy_enabled`: ntfy通知の有効/無効
 - `ntfy_topic`: ntfyトピック名（空なら送信しない）
 - `notification_level`: 通知レベル（MVPでは2想定）
+- `notion_enabled`: 体調ログのNotion同期の有効/無効
+- `notion_database_id`: 同期先のNotionデータベースIDまたはURL
+- `notion_api_token`: Notion内部インテグレーションのトークン
 - `effects_enabled`: 休憩オーバーレイ画像演出の有効/無効
 - `effect_image_path`: 休憩オーバーレイに表示する画像ファイルパス（空なら表示しない）
 - `start_with_windows`: Windowsログイン時の自動起動
@@ -41,6 +44,26 @@ Copy-Item config.example.json config.json
 1. Android に `ntfy` アプリをインストール
 2. 任意トピックを購読
 3. `config.json` で `ntfy_enabled: true` と `ntfy_topic` を設定
+
+## Notion同期
+
+1. [Notion integrations](https://www.notion.so/profile/integrations) で内部インテグレーションを作成し、コンテンツの読み取り・挿入権限を付与
+2. 同期先データベースをそのインテグレーションと共有
+3. アプリの「設定」でNotion同期を有効化し、DB ID/URLとintegration tokenを保存
+4. トレイメニューの「Notionへ同期」を実行
+
+同期はバックグラウンドで実行され、`notion_synced=false` の記録だけを転送します。ローカルの同期状態更新前にアプリが終了しても、次回は同期キーで既存ページを確認するため重複作成しません。
+
+Notion側ではタイトル列を必須とし、次の名前と型が存在する場合は自動で列に割り当てます。
+
+| 列名 | 推奨型 |
+| --- | --- |
+| `日時` | 日付 |
+| `体調` / `気分` / `余力` | 数値 |
+| `不調項目` | マルチセレクト |
+| `コメント` / `source` | テキスト |
+
+列がない場合でも、元のJSONレコードをNotionページ本文に保存します。`notion_api_token` はGit管理対象外の `config.json` に保存されますが、平文であるためファイルの取り扱いに注意してください。
 
 ### メッセージ文言の編集
 
@@ -86,6 +109,7 @@ python main.py
 - グローバルホットキー開始（任意）
 - ntfy によるAndroid通知（任意）
 - SQLiteログ記録
+- 体調ログのNotion同期（任意）
 - アプリ内ログビューア
 
 ## ログファイル

@@ -25,6 +25,9 @@ class AppConfig:
     ntfy_enabled: bool = False
     ntfy_topic: str = ""
     notification_level: int = 2
+    notion_enabled: bool = False
+    notion_database_id: str = ""
+    notion_api_token: str = ""
     effects_enabled: bool = False
     effect_image_path: str = ""
     status_widget_enabled: bool = True
@@ -158,6 +161,15 @@ def load_config(path: Path | None = None) -> AppConfig:
                 default.notification_level,
                 min_value=1,
             ),
+            notion_enabled=_as_bool(raw.get("notion_enabled"), default.notion_enabled),
+            notion_database_id=_as_str(
+                raw.get("notion_database_id"),
+                default.notion_database_id,
+            ),
+            notion_api_token=_as_str(
+                raw.get("notion_api_token"),
+                default.notion_api_token,
+            ),
             effects_enabled=_as_bool(raw.get("effects_enabled"), default.effects_enabled),
             effect_image_path=_as_str(raw.get("effect_image_path"), default.effect_image_path),
             status_widget_enabled=_as_bool(
@@ -184,6 +196,9 @@ def save_config(config: AppConfig, path: Path | None = None) -> bool:
         "ntfy_enabled": bool(config.ntfy_enabled),
         "ntfy_topic": str(config.ntfy_topic),
         "notification_level": int(config.notification_level),
+        "notion_enabled": bool(config.notion_enabled),
+        "notion_database_id": str(config.notion_database_id),
+        "notion_api_token": str(config.notion_api_token),
         "effects_enabled": bool(config.effects_enabled),
         "effect_image_path": str(config.effect_image_path),
         "status_widget_enabled": bool(config.status_widget_enabled),

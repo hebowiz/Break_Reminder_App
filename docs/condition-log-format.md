@@ -64,7 +64,9 @@ IBS, 眠気, 倦怠感, 疲れやすい, 頭痛, 動悸, 下痢, 火照り,
 | `comment` | string | Yes | No | 未入力時は `""` |
 | `symptoms` | array of string | Yes | No | 未選択時は `[]` |
 | `source` | string | Yes | No | 現在は `"break_reminder"` 固定 |
-| `notion_synced` | boolean | Yes | No | 現在は常に `false` |
+| `notion_synced` | boolean | Yes | No | 新規記録は `false`、Notion同期後は `true` |
+
+Notion同期後は `notion_synced` を `true` に更新し、返却されたNotionページIDを `notion_page_id` として追加する。これらの同期メタデータ更新時のみ、JSONL全体をテンポラリファイル経由でアトミックに置き換える。
 
 ## 正規化ルール
 
@@ -109,6 +111,7 @@ IBS, 眠気, 倦怠感, 疲れやすい, 頭痛, 動悸, 下痢, 火照り,
 - 閲覧ダイアログでは JSONL を全件読み込み、日時の降順で表示する
 - 表示列は `日時 | 体調 | 気分 | 余力 | 不調項目 | コメント`
 - 専用の CSV・JSON エクスポート処理は未実装
+- Notion同期は未同期レコードのみを対象とし、レコード内容から作る決定的な同期キーで重複登録を防止する
 - 現状は JSONL ファイル自体が持ち出し可能な原本
 
 ## PWA 共通化時に固定すべき外部仕様
@@ -162,7 +165,7 @@ break_reminder_pwa
 
 ### notion_synced
 
-現行互換のため JSONL では boolean として保持する。複数端末同期を導入する場合は、同期状態をログ本体から分離する設計も検討する。
+現行互換のため JSONL では boolean として保持する。Notion同期完了時に `true` へ更新する。複数端末同期を導入する場合は、同期状態をログ本体から分離する設計も検討する。
 
 ## 現行実装の参照先
 

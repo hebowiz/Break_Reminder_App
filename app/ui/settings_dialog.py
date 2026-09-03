@@ -60,6 +60,14 @@ class SettingsDialog(QDialog):
         self._notification_level.addItem("Level 2", 2)
         self._notification_level.addItem("Level 3", 3)
 
+        self._notion_enabled = QCheckBox("Notion 同期を有効化", self)
+        self._notion_database_id = QLineEdit(self)
+        self._notion_database_id.setPlaceholderText("Notion DB ID または URL")
+        self._notion_api_token = QLineEdit(self)
+        self._notion_api_token.setEchoMode(QLineEdit.EchoMode.Password)
+        self._notion_api_token.setPlaceholderText("secret_... / ntn_...")
+        self._notion_enabled.toggled.connect(self._set_notion_fields_enabled)
+
         self._effects_enabled = QCheckBox("演出を有効化（未実装）", self)
         self._effects_enabled.setText("演出を有効化")
         self._status_widget_enabled = QCheckBox("状態ウィジェットを表示", self)
@@ -88,6 +96,9 @@ class SettingsDialog(QDialog):
         form.addRow("ntfy", self._ntfy_enabled)
         form.addRow("ntfy topic", self._ntfy_topic)
         form.addRow("通知レベル", self._notification_level)
+        form.addRow("Notion", self._notion_enabled)
+        form.addRow("Notion DB", self._notion_database_id)
+        form.addRow("Notion token", self._notion_api_token)
         form.addRow("演出", self._effects_enabled)
         form.addRow("演出画像", image_path_container)
         form.addRow("状態ウィジェット", self._status_widget_enabled)
@@ -116,6 +127,11 @@ class SettingsDialog(QDialog):
         index = self._notification_level.findData(config.notification_level)
         self._notification_level.setCurrentIndex(index if index >= 0 else 1)
 
+        self._notion_enabled.setChecked(config.notion_enabled)
+        self._notion_database_id.setText(config.notion_database_id)
+        self._notion_api_token.setText(config.notion_api_token)
+        self._set_notion_fields_enabled(config.notion_enabled)
+
         self._effects_enabled.setChecked(config.effects_enabled)
         self._effect_image_path.setText(config.effect_image_path)
         self._status_widget_enabled.setChecked(config.status_widget_enabled)
@@ -132,6 +148,9 @@ class SettingsDialog(QDialog):
             ntfy_enabled=bool(self._ntfy_enabled.isChecked()),
             ntfy_topic=self._ntfy_topic.text().strip(),
             notification_level=int(self._notification_level.currentData()),
+            notion_enabled=bool(self._notion_enabled.isChecked()),
+            notion_database_id=self._notion_database_id.text().strip(),
+            notion_api_token=self._notion_api_token.text().strip(),
             effects_enabled=bool(self._effects_enabled.isChecked()),
             effect_image_path=self._effect_image_path.text().strip(),
             status_widget_enabled=bool(self._status_widget_enabled.isChecked()),
@@ -144,11 +163,25 @@ class SettingsDialog(QDialog):
     def _on_save(self) -> None:
         """Persist settings to config.json and close on success."""
         config = self._build_config()
+        if config.notion_enabled and (
+            not config.notion_database_id or not config.notion_api_token
+        ):
+            QMessageBox.warning(
+                self,
+                "Notion 設定エラー",
+                "Notion DB ID と integration token を入力してください。",
+            )
+            return
         if not save_config(config):
             QMessageBox.warning(self, "エラー", "設定の保存に失敗しました。")
             return
         self._saved_config = config
         self.accept()
+
+    def _set_notion_fields_enabled(self, enabled: bool) -> None:
+        """Enable Notion connection inputs only when synchronization is active."""
+        self._notion_database_id.setEnabled(enabled)
+        self._notion_api_token.setEnabled(enabled)
 
     def _browse_effect_image(self) -> None:
         """Open file dialog and set selected effect image path."""

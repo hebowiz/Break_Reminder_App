@@ -5,7 +5,7 @@ from __future__ import annotations
 import traceback
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, QThread, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,6 +25,7 @@ from app.infra.hotkey import GlobalHotkeyManager
 from app.infra.idle_tracker import IdleTracker
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
+from app.infra.notion_sync import NotionConditionSync, NotionSyncResult
 from app.infra.startup import apply_startup_setting
 from app.state import AppState
 from app.ui.break_dialog import (
@@ -40,10 +41,34 @@ from app.ui.status_popup import StatusPopup
 from app.ui.status_widget import StatusWidget
 
 
-class TrayController:
+class NotionSyncWorker(QThread):
+    """Run network synchronization without blocking the tray UI."""
+
+    def __init__(self, token: str, database_id: str) -> None:
+        super().__init__()
+        self._token = token
+        self._database_id = database_id
+        self.result: NotionSyncResult | None = None
+        self.error_message: str | None = None
+
+    def run(self) -> None:
+        """Synchronize pending records and retain a user-facing outcome."""
+        try:
+            synchronizer = NotionConditionSync(
+                token=self._token,
+                database_id=self._database_id,
+            )
+            self.result = synchronizer.sync_pending_records()
+        except Exception as exc:
+            traceback.print_exc()
+            self.error_message = str(exc)
+
+
+class TrayController(QObject):
     """Manage tray icon, timer flow, and tray menu actions."""
 
     def __init__(self, app: QApplication) -> None:
+        super().__init__(app)
         self._app = app
         self._config: AppConfig = load_config()
         self._is_break_dialog_open = False
@@ -58,6 +83,7 @@ class TrayController:
         self._log_viewer: LogViewerDialog | None = None
         self._condition_log_viewer: ConditionLogViewerDialog | None = None
         self._last_condition_input: ConditionInput | None = None
+        self._notion_sync_worker: NotionSyncWorker | None = None
 
         self._timer_controller = TimerController(
             work_minutes=self._config.work_minutes,
@@ -104,6 +130,7 @@ class TrayController:
         self._status_action = QAction("状態表示", self._menu)
         self._condition_action = QAction("体調入力", self._menu)
         self._show_condition_logs_action = QAction("体調ログ", self._menu)
+        self._sync_notion_action = QAction("Notionへ同期", self._menu)
         self._show_logs_action = QAction("ログを表示", self._menu)
         self._settings_action = QAction("設定", self._menu)
         self._quit_action = QAction("終了", self._menu)
@@ -126,6 +153,9 @@ class TrayController:
         self._show_condition_logs_action.triggered.connect(
             lambda checked=False: self.show_condition_logs(checked)
         )
+        self._sync_notion_action.triggered.connect(
+            lambda checked=False: self.sync_condition_logs(checked)
+        )
         self._settings_action.triggered.connect(lambda checked=False: self.show_settings(checked))
         self._show_logs_action.triggered.connect(lambda checked=False: self.show_logs(checked))
         self._quit_action.triggered.connect(lambda checked=False: self.quit_app(checked))
@@ -136,6 +166,7 @@ class TrayController:
         self._menu.addAction(self._status_action)
         self._menu.addAction(self._condition_action)
         self._menu.addAction(self._show_condition_logs_action)
+        self._menu.addAction(self._sync_notion_action)
         self._menu.addAction(self._settings_action)
         self._menu.addAction(self._show_logs_action)
         self._menu.addSeparator()
@@ -268,6 +299,71 @@ class TrayController:
         except Exception:
             traceback.print_exc()
 
+    def sync_condition_logs(self, checked: bool = False) -> None:
+        """Start a background upload of pending condition logs to Notion."""
+        _ = checked
+        if self._notion_sync_worker is not None:
+            return
+        if not self._config.notion_enabled:
+            QMessageBox.information(
+                None,
+                "Notion同期",
+                "設定画面で Notion 同期を有効にしてください。",
+            )
+            return
+        if not self._config.notion_database_id or not self._config.notion_api_token:
+            QMessageBox.warning(
+                None,
+                "Notion設定エラー",
+                "Notion DB ID と integration token を設定してください。",
+            )
+            return
+
+        worker = NotionSyncWorker(
+            token=self._config.notion_api_token,
+            database_id=self._config.notion_database_id,
+        )
+        worker.finished.connect(self._on_notion_sync_finished)
+        self._notion_sync_worker = worker
+        self._sync_notion_action.setEnabled(False)
+        self._tray_icon.showMessage(
+            "Notion同期",
+            "体調ログの同期を開始しました。",
+            QSystemTrayIcon.MessageIcon.Information,
+            3000,
+        )
+        worker.start()
+
+    def _on_notion_sync_finished(self) -> None:
+        """Report the completed background synchronization."""
+        worker = self._notion_sync_worker
+        if worker is None:
+            return
+        error_message = worker.error_message
+        result = worker.result
+        worker.deleteLater()
+        self._notion_sync_worker = None
+        self._update_action_state()
+
+        if error_message:
+            QMessageBox.warning(None, "Notion同期エラー", error_message)
+            return
+        if result is None:
+            QMessageBox.warning(None, "Notion同期エラー", "同期結果を取得できませんでした。")
+            return
+
+        QMessageBox.information(
+            None,
+            "Notion同期完了",
+            "\n".join(
+                [
+                    f"新規追加: {result.uploaded} 件",
+                    f"既存ページ確認: {result.linked_existing} 件",
+                    f"同期済み: {result.already_synced} 件",
+                ]
+            ),
+        )
+
     def show_settings(self, checked: bool = False) -> None:
         """Open settings dialog and apply saved values."""
         try:
@@ -305,6 +401,7 @@ class TrayController:
             )
             self._apply_windows_startup(notify=True)
             self._apply_hotkey_settings(notify=True)
+            self._update_action_state()
             self._stop_confirm_dialog = EndWorkConfirmDialog(
                 end_confirm_message=self._config.messages["end_confirm"],
             )
@@ -322,6 +419,13 @@ class TrayController:
         """Quit the application explicitly from tray menu."""
         try:
             _ = checked
+            if self._notion_sync_worker is not None:
+                QMessageBox.information(
+                    None,
+                    "Notion同期中",
+                    "Notion同期が完了してから終了してください。",
+                )
+                return
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
             self._status_widget.hide()
@@ -402,6 +506,9 @@ class TrayController:
             self._start_or_resume_action.setEnabled(state == AppState.STOPPED)
 
         self._stop_action.setEnabled(state in (AppState.WORKING, AppState.NOTIFYING, AppState.BREAKING))
+        self._sync_notion_action.setEnabled(
+            self._config.notion_enabled and self._notion_sync_worker is None
+        )
 
     def _build_icon(self) -> QIcon:
         """Use a standard Qt icon to guarantee tray visibility in MVP."""
