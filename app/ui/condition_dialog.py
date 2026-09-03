@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -73,6 +74,8 @@ class ConditionInputDialog(QDialog):
     def _setup_ui(self) -> None:
         """Build condition input UI."""
         self.setWindowTitle("体調入力")
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setMinimumWidth(520)
 
         layout = QVBoxLayout(self)
@@ -88,6 +91,16 @@ class ConditionInputDialog(QDialog):
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        """Bring the condition dialog in front of its caller."""
+        super().showEvent(event)
+        QTimer.singleShot(0, self._activate_for_input)
+
+    def _activate_for_input(self) -> None:
+        """Raise and activate the dialog after the native window is shown."""
+        self.raise_()
+        self.activateWindow()
 
     def _build_score_row(self, key: str, label_text: str) -> QWidget:
         """Build one slider row with a realtime percentage label."""

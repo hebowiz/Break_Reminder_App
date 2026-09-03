@@ -5,8 +5,16 @@ from __future__ import annotations
 import traceback
 from pathlib import Path
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QStyle, QSystemTrayIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QMenu,
+    QMessageBox,
+    QStyle,
+    QSystemTrayIcon,
+)
 
 from app.config import AppConfig, load_config
 from app.core.time_utils import format_clock_time
@@ -75,12 +83,18 @@ class TrayController:
             min_break_seconds=self._config.min_break_seconds,
             idle_tracker=self._idle_tracker,
             on_break_satisfied=self._on_break_satisfied,
-            on_condition_input=self.show_condition_input,
+            on_condition_input=lambda: self.show_condition_input(
+                parent=self._break_dialog
+            ),
         )
         self._stop_confirm_dialog = EndWorkConfirmDialog(
             end_confirm_message=self._config.messages["end_confirm"],
         )
-        self._work_duration_dialog = WorkDurationDialog()
+        self._work_duration_dialog = WorkDurationDialog(
+            on_condition_input=lambda: self.show_condition_input(
+                parent=self._work_duration_dialog
+            )
+        )
 
         self._tray_icon = QSystemTrayIcon(self._build_icon(), app)
         self._menu = QMenu()
@@ -134,6 +148,7 @@ class TrayController:
         self._apply_hotkey_settings(notify=False)
         self._update_action_state()
         self._status_widget.refresh()
+        QTimer.singleShot(0, self.start_work)
 
     def start_work(self, checked: bool = False) -> None:
         """Start work timer via TimerController."""
@@ -197,11 +212,15 @@ class TrayController:
         except Exception:
             traceback.print_exc()
 
-    def show_condition_input(self, checked: bool = False) -> None:
+    def show_condition_input(
+        self,
+        checked: bool = False,
+        parent: QDialog | None = None,
+    ) -> None:
         """Open lightweight condition input dialog."""
         try:
             _ = checked
-            dialog = ConditionInputDialog()
+            dialog = ConditionInputDialog(parent=parent)
             if dialog.exec() == ConditionInputDialog.DialogCode.Accepted:
                 self._last_condition_input = dialog.condition_input
                 record = build_condition_log_record(
@@ -276,7 +295,9 @@ class TrayController:
                 min_break_seconds=self._config.min_break_seconds,
                 idle_tracker=self._idle_tracker,
                 on_break_satisfied=self._on_break_satisfied,
-                on_condition_input=self.show_condition_input,
+                on_condition_input=lambda: self.show_condition_input(
+                    parent=self._break_dialog
+                ),
             )
             self._effect_manager.update_settings(
                 enabled=self._config.effects_enabled,

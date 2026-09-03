@@ -29,8 +29,13 @@ def format_next_break_time(minutes: int) -> str:
 class WorkDurationDialog(QDialog):
     """Ask for the work duration used by the next session."""
 
-    def __init__(self, parent: QDialog | None = None) -> None:
+    def __init__(
+        self,
+        on_condition_input: Callable[[], None] | None = None,
+        parent: QDialog | None = None,
+    ) -> None:
         super().__init__(parent)
+        self._on_condition_input = on_condition_input
         self._duration_spin: QSpinBox | None = None
         self._next_break_label: QLabel | None = None
         self._setup_ui()
@@ -79,8 +84,14 @@ class WorkDurationDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 
+        condition_button = QPushButton("体調入力", self)
+        condition_button.setAutoDefault(False)
+        condition_button.setDefault(False)
+        condition_button.clicked.connect(self._open_condition_input)
+
         layout = QVBoxLayout(self)
         layout.addLayout(form)
+        layout.addWidget(condition_button)
         layout.addWidget(buttons)
 
     def _activate_for_input(self) -> None:
@@ -96,6 +107,11 @@ class WorkDurationDialog(QDialog):
         if self._next_break_label is None:
             return
         self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
+
+    def _open_condition_input(self) -> None:
+        """Open condition input while keeping this dialog alive."""
+        if self._on_condition_input is not None:
+            self._on_condition_input()
 
 
 class EndWorkConfirmDialog(QDialog):
