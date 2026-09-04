@@ -25,19 +25,21 @@ from app.infra.condition_logger import normalize_symptoms, split_symptom_text
 
 SYMPTOM_ITEMS = [
     "IBS",
+    "下痢",
     "眠気",
     "倦怠感",
     "疲れやすい",
     "頭痛",
     "動悸",
-    "下痢",
     "火照り",
+    "発熱",
+    "悪寒",
     "目眩",
     "鼻炎",
     "目のかすみ",
-    "発熱",
-    "悪寒",
+    "目の痙攣",
     "思考乱れ",
+    "結石",
     "その他",
 ]
 
