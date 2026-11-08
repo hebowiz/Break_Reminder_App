@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from datetime import datetime
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
 
-from app.core.time_utils import format_clock_time
+from app.core.time_utils import format_clock_time, remaining_minutes
 from app.state import AppState
 
 
@@ -53,10 +52,9 @@ class StatusWidget(QWidget):
             self.hide()
             return
 
-        remaining_seconds = max(0.0, (next_break_datetime - datetime.now()).total_seconds())
-        remaining_minutes = max(0, math.ceil(remaining_seconds / 60))
+        minutes = remaining_minutes(next_break_datetime)
         self._time_label.setText(
-            f"{format_clock_time(next_break_datetime)} ({remaining_minutes}分後)"
+            f"{format_clock_time(next_break_datetime)} ({minutes}分後)"
         )
         self.adjustSize()
         self._move_to_primary_screen_top_right()

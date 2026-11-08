@@ -9,7 +9,7 @@ from datetime import datetime
 
 from PySide6.QtCore import QTimer
 
-from app.core.time_utils import calculate_next_break_datetime
+from app.core.time_utils import calculate_next_break_datetime, remaining_minutes
 from app.infra.logger import SQLiteLogger
 from app.infra.ntfy_notifier import NtfyNotifier
 from app.state import AppState
@@ -47,15 +47,14 @@ class TimerController:
         """Return current app state."""
         return self._state
 
-    def start_work(self, work_minutes: int | None = None) -> None:
-        """Start a work session timer."""
-        self.current_work_duration_minutes = max(
-            1,
-            int(self._work_minutes if work_minutes is None else work_minutes),
+    def start_work(self, next_break_datetime: datetime | None = None) -> None:
+        """Start work against the confirmed datetime without reinterpreting its date."""
+        self.next_break_datetime = (
+            next_break_datetime
+            if next_break_datetime is not None
+            else calculate_next_break_datetime(self._work_minutes)
         )
-        self.next_break_datetime = calculate_next_break_datetime(
-            self.current_work_duration_minutes
-        )
+        self.current_work_duration_minutes = remaining_minutes(self.next_break_datetime)
         self._break_started_at = None
         self._notification_shown_at = None
         self._state = AppState.WORKING
@@ -88,11 +87,11 @@ class TimerController:
         self._notification_shown_at = now
         self._state = AppState.BREAKING
 
-    def resume_work(self, work_minutes: int | None = None) -> None:
+    def resume_work(self, next_break_datetime: datetime | None = None) -> None:
         """Resume work by starting a new configured work session."""
         if self._logger is not None and self._active_session_id is not None:
             self._logger.mark_work_resumed(self._active_session_id)
-        self.start_work(work_minutes)
+        self.start_work(next_break_datetime)
 
     def get_break_elapsed_seconds(self) -> int:
         """Return elapsed break seconds since latest break start."""

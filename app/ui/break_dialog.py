@@ -3,31 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QCloseEvent, QHideEvent, QKeyEvent, QShowEvent
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QFormLayout,
     QLabel,
     QLineEdit,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
 )
-from app.core.time_utils import calculate_next_break_datetime, format_clock_time
 from app.infra.idle_tracker import IdleTracker
+from app.ui.break_time_input import BreakTimeInput
 from app.ui.screen_utils import get_screen_at_cursor
 
 
-def format_next_break_time(minutes: int) -> str:
-    """Return the next break clock time for a work duration."""
-    return format_clock_time(calculate_next_break_datetime(minutes))
-
-
 class WorkDurationDialog(QDialog):
-    """Ask for the work duration used by the next session."""
+    """Ask for the next break time used by the next session."""
 
     def __init__(
         self,
@@ -36,22 +30,22 @@ class WorkDurationDialog(QDialog):
     ) -> None:
         super().__init__(parent)
         self._on_condition_input = on_condition_input
-        self._duration_spin: QSpinBox | None = None
-        self._next_break_label: QLabel | None = None
+        self._confirmed_break_datetime: datetime | None = None
+        self._break_time_input = BreakTimeInput(self)
         self._setup_ui()
 
-    def ask(self, default_minutes: int) -> tuple[bool, int]:
-        """Show duration input dialog and return (accepted, minutes)."""
-        default_value = max(1, int(default_minutes))
-        if self._duration_spin is not None:
-            self._duration_spin.setValue(default_value)
-        self._update_next_break_time(default_value)
+    def ask(self, default_minutes: int) -> tuple[bool, datetime | None]:
+        """Reset from settings and return the datetime captured when OK is pressed."""
+        self._confirmed_break_datetime = None
+        self._break_time_input.reset(default_minutes)
         QTimer.singleShot(0, self._activate_for_input)
         accepted = self.exec() == QDialog.DialogCode.Accepted
-        minutes = default_value
-        if self._duration_spin is not None:
-            minutes = int(self._duration_spin.value())
-        return accepted, minutes
+        return accepted, self._confirmed_break_datetime if accepted else None
+
+    def accept(self) -> None:
+        """Capture the selected date and time exactly once at confirmation."""
+        self._confirmed_break_datetime = self._break_time_input.selected_datetime()
+        super().accept()
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         """Bring the dialog forward and focus the input when shown."""
@@ -59,24 +53,11 @@ class WorkDurationDialog(QDialog):
         self._activate_for_input()
 
     def _setup_ui(self) -> None:
-        """Build work duration input UI."""
-        self.setWindowTitle("作業時間")
+        """Build next break time input UI."""
+        self.setWindowTitle("次の休憩")
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         self.setMinimumWidth(300)
-
-        self._duration_spin = QSpinBox(self)
-        self._duration_spin.setRange(1, 240)
-        self._duration_spin.setSingleStep(1)
-        self._duration_spin.setSuffix(" 分")
-        self._duration_spin.valueChanged.connect(self._update_next_break_time)
-
-        self._next_break_label = QLabel(self)
-        self._next_break_label.setWordWrap(True)
-
-        form = QFormLayout()
-        form.addRow("作業時間", self._duration_spin)
-        form.addRow("", self._next_break_label)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -90,23 +71,16 @@ class WorkDurationDialog(QDialog):
         condition_button.clicked.connect(self._open_condition_input)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
+        layout.addWidget(self._break_time_input)
         layout.addWidget(condition_button)
         layout.addWidget(buttons)
 
     def _activate_for_input(self) -> None:
-        """Make this dialog active and focus the duration input."""
+        """Make this dialog active and focus the time input."""
         self.raise_()
         self.activateWindow()
-        if self._duration_spin is not None:
-            self._duration_spin.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-            self._duration_spin.selectAll()
-
-    def _update_next_break_time(self, minutes: int) -> None:
-        """Refresh next break time preview."""
-        if self._next_break_label is None:
-            return
-        self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
+        self._break_time_input.time_edit.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self._break_time_input.time_edit.selectAll()
 
     def _open_condition_input(self) -> None:
         """Open condition input while keeping this dialog alive."""
@@ -200,7 +174,7 @@ class BreakDialog(QDialog):
 
     def __init__(
         self,
-        on_decision: Callable[[str, str | None, int | None], None],
+        on_decision: Callable[[str, str | None, datetime | None], None],
         break_normal_message: str,
         break_too_short_message: str,
         end_confirm_message: str,
@@ -221,8 +195,7 @@ class BreakDialog(QDialog):
         self._idle_tracker = idle_tracker
         self._message_label: QLabel | None = None
         self._idle_label: QLabel | None = None
-        self._duration_spin: QSpinBox | None = None
-        self._next_break_label: QLabel | None = None
+        self._break_time_input = BreakTimeInput(self)
         self._break_done_button: QPushButton | None = None
         self._break_satisfied = False
         self._was_already_idle = False
@@ -239,7 +212,7 @@ class BreakDialog(QDialog):
     def open_prompt(self, message_kind: str = MESSAGE_NORMAL) -> None:
         """Open the dialog in non-modal mode and keep it on top."""
         self._apply_message(message_kind)
-        self._reset_work_duration()
+        self._reset_break_time()
         self._break_satisfied = False
         self._was_already_idle = self._detect_already_idle()
         self._waiting_for_return_after_satisfied = False
@@ -289,19 +262,7 @@ class BreakDialog(QDialog):
         self._idle_label.setWordWrap(True)
         layout.addWidget(self._idle_label)
 
-        self._duration_spin = QSpinBox(self)
-        self._duration_spin.setRange(1, 240)
-        self._duration_spin.setSingleStep(1)
-        self._duration_spin.setSuffix(" 分")
-        self._duration_spin.valueChanged.connect(self._update_next_break_time)
-
-        self._next_break_label = QLabel(self)
-        self._next_break_label.setWordWrap(True)
-
-        duration_form = QFormLayout()
-        duration_form.addRow("作業時間", self._duration_spin)
-        duration_form.addRow("", self._next_break_label)
-        layout.addLayout(duration_form)
+        layout.addWidget(self._break_time_input)
 
         break_done_button = QPushButton("作業再開", self)
         condition_button = QPushButton("体調入力", self)
@@ -321,7 +282,7 @@ class BreakDialog(QDialog):
         layout.addWidget(end_work_button)
 
         self._apply_message(self.MESSAGE_NORMAL)
-        self._reset_work_duration()
+        self._reset_break_time()
 
     def _apply_message(self, message_kind: str) -> None:
         """Update prompt text according to message context."""
@@ -379,12 +340,12 @@ class BreakDialog(QDialog):
 
     def _decide(self, action: str, memo: str | None = None) -> None:
         """Notify decision and hide dialog."""
-        work_minutes = None
-        if action == self.ACTION_BREAK_DONE and self._duration_spin is not None:
-            work_minutes = int(self._duration_spin.value())
+        next_break_datetime = None
+        if action == self.ACTION_BREAK_DONE:
+            next_break_datetime = self._break_time_input.selected_datetime()
         self._idle_timer.stop()
         self.hide()
-        self._on_decision(action, memo, work_minutes)
+        self._on_decision(action, memo, next_break_datetime)
 
     def _mark_break_satisfied(self) -> None:
         """Latch break-satisfied state and notify observer once."""
@@ -414,18 +375,9 @@ class BreakDialog(QDialog):
         if self._on_condition_input is not None:
             self._on_condition_input()
 
-    def _reset_work_duration(self) -> None:
-        """Reset work duration input to settings default."""
-        if self._duration_spin is None:
-            return
-        self._duration_spin.setValue(self._default_work_minutes)
-        self._update_next_break_time(self._default_work_minutes)
-
-    def _update_next_break_time(self, minutes: int) -> None:
-        """Refresh next break time preview."""
-        if self._next_break_label is None:
-            return
-        self._next_break_label.setText(f"次の休憩: {format_next_break_time(minutes)}")
+    def _reset_break_time(self) -> None:
+        """Reset the next break time using the current time and settings duration."""
+        self._break_time_input.reset(self._default_work_minutes)
 
     def _detect_already_idle(self) -> bool:
         """Return whether user was already idle when the break prompt opened."""

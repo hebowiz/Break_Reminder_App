@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import traceback
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, QTimer
@@ -17,7 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.config import AppConfig, load_config
-from app.core.time_utils import format_clock_time
+from app.core.time_utils import format_clock_time, remaining_minutes
 from app.core.timer_controller import TimerController
 from app.effects.effect_manager import EffectManager
 from app.infra.condition_logger import append_condition_log, build_condition_log_record
@@ -188,11 +189,11 @@ class TrayController(QObject):
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
-            accepted, work_minutes = self._work_duration_dialog.ask(self._config.work_minutes)
+            accepted, next_break_datetime = self._work_duration_dialog.ask(self._config.work_minutes)
             if not accepted:
                 self._update_action_state()
                 return
-            self._timer_controller.start_work(work_minutes)
+            self._timer_controller.start_work(next_break_datetime)
             self._show_work_started_notification()
             self._update_action_state()
             self._status_widget.refresh()
@@ -224,11 +225,11 @@ class TrayController(QObject):
             self._break_dialog.hide()
             self._effect_manager.hide_break_effect()
             self._is_break_dialog_open = False
-            accepted, work_minutes = self._work_duration_dialog.ask(self._config.work_minutes)
+            accepted, next_break_datetime = self._work_duration_dialog.ask(self._config.work_minutes)
             if not accepted:
                 self._update_action_state()
                 return
-            self._timer_controller.resume_work(work_minutes)
+            self._timer_controller.resume_work(next_break_datetime)
             self._show_work_started_notification()
             self._update_action_state()
             self._status_widget.refresh()
@@ -464,14 +465,14 @@ class TrayController(QObject):
         self,
         action: str,
         memo: str | None = None,
-        work_minutes: int | None = None,
+        next_break_datetime: datetime | None = None,
     ) -> None:
         """Apply user decision from break dialog."""
         try:
             self._is_break_dialog_open = False
             self._effect_manager.hide_break_effect()
             if action == BreakDialog.ACTION_BREAK_DONE:
-                self._timer_controller.resume_work(work_minutes)
+                self._timer_controller.resume_work(next_break_datetime)
                 self._show_work_started_notification()
             elif action == BreakDialog.ACTION_END_WORK:
                 end_reason = memo if memo else "user_ended"
@@ -521,10 +522,10 @@ class TrayController(QObject):
         if tray_icon is None or not tray_icon.isVisible():
             return
 
-        work_minutes = max(1, int(self._timer_controller.current_work_duration_minutes))
         next_break_datetime = self._timer_controller.next_break_datetime
         if next_break_datetime is None:
             return
+        work_minutes = remaining_minutes(next_break_datetime)
         next_break_time = format_clock_time(next_break_datetime)
         tray_icon.showMessage(
             "作業開始",
