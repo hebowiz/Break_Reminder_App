@@ -79,8 +79,8 @@ class WorkDurationDialog(QDialog):
         """Make this dialog active and focus the time input."""
         self.raise_()
         self.activateWindow()
-        self._break_time_input.time_edit.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-        self._break_time_input.time_edit.selectAll()
+        self._break_time_input.hour_spin.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self._break_time_input.hour_spin.selectAll()
 
     def _open_condition_input(self) -> None:
         """Open condition input while keeping this dialog alive."""

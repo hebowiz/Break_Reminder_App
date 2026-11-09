@@ -10,8 +10,9 @@ from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QTime, QTimer
-from PySide6.QtWidgets import QApplication, QDialogButtonBox, QTimeEdit
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QDialogButtonBox, QSpinBox, QStyle, QStyleOptionSpinBox
 
 from app.core.time_utils import remaining_minutes, resolve_next_break_datetime
 from app.core.timer_controller import TimerController
@@ -77,17 +78,20 @@ class SchedulingFlowTests(unittest.TestCase):
     def test_input_defaults_editing_and_elapsed_preview(self) -> None:
         widget = self.keep_widget(BreakTimeInput())
         widget.reset(45)
-        self.assertIsInstance(widget.time_edit, QTimeEdit)
-        self.assertEqual(widget.time_edit.displayFormat(), "HH:mm")
-        self.assertEqual(widget.time_edit.time(), QTime(15, 20))
-        self.assertEqual(widget.remaining_label.text(), "休憩まで: 45分後")
-        widget.time_edit.setTime(QTime(15, 30))
-        self.assertEqual(widget.remaining_label.text(), "休憩まで: 55分後")
+        self.assertIsInstance(widget.hour_spin, QSpinBox)
+        self.assertIsInstance(widget.minute_spin, QSpinBox)
+        self.assertEqual((widget.hour_spin.value(), widget.minute_spin.value()), (15, 20))
+        self.assertEqual(widget.remaining_label.text(), "45分後")
+        widget.minute_spin.setValue(30)
+        self.assertEqual(widget.remaining_label.text(), "55分後")
+        widget.hour_spin.setValue(16)
+        self.assertEqual(widget.remaining_label.text(), "115分後")
+        widget.hour_spin.setValue(15)
         widget.show()
         self.assertTrue(widget._refresh_timer.isActive())
         self.now += timedelta(minutes=10)
         widget._refresh_timer.timeout.emit()
-        self.assertEqual(widget.remaining_label.text(), "休憩まで: 45分後")
+        self.assertEqual(widget.remaining_label.text(), "45分後")
         widget.hide()
         self.assertFalse(widget._refresh_timer.isActive())
 
@@ -96,7 +100,8 @@ class SchedulingFlowTests(unittest.TestCase):
         buttons = dialog.findChild(QDialogButtonBox)
 
         def confirm() -> None:
-            dialog._break_time_input.time_edit.setTime(QTime(0, 30))
+            dialog._break_time_input.hour_spin.setValue(0)
+            dialog._break_time_input.minute_spin.setValue(30)
             buttons.button(QDialogButtonBox.StandardButton.Ok).click()
 
         QTimer.singleShot(0, confirm)
@@ -109,32 +114,92 @@ class SchedulingFlowTests(unittest.TestCase):
         QTimer.singleShot(0, buttons.button(QDialogButtonBox.StandardButton.Cancel).click)
         self.assertEqual(dialog.ask(45), (False, None))
 
+    def test_spin_buttons_wrap_independently_in_both_directions(self) -> None:
+        widget = self.keep_widget(BreakTimeInput())
+        widget.show()
+        self.app.processEvents()
+
+        def click_arrow(spin: QSpinBox, control: QStyle.SubControl) -> None:
+            option = QStyleOptionSpinBox()
+            spin.initStyleOption(option)
+            rect = spin.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox, option, control, spin
+            )
+            self.assertTrue(rect.isValid())
+            self.assertGreater(rect.center().x(), spin.width() / 2)
+            QTest.mouseClick(spin, Qt.MouseButton.LeftButton, pos=rect.center())
+
+        for spin, other, maximum in (
+            (widget.minute_spin, widget.hour_spin, 59),
+            (widget.hour_spin, widget.minute_spin, 23),
+        ):
+            with self.subTest(maximum=maximum):
+                other.setValue(15)
+                spin.setValue(maximum)
+                click_arrow(spin, QStyle.SubControl.SC_SpinBoxUp)
+                self.assertEqual(spin.value(), 0)
+                self.assertEqual(spin.text(), "00")
+                self.assertEqual(other.value(), 15)
+                click_arrow(spin, QStyle.SubControl.SC_SpinBoxDown)
+                self.assertEqual(spin.value(), maximum)
+                self.assertEqual(other.value(), 15)
+                spin.setValue(8)
+                click_arrow(spin, QStyle.SubControl.SC_SpinBoxUp)
+                self.assertEqual(spin.text(), "09")
+                click_arrow(spin, QStyle.SubControl.SC_SpinBoxDown)
+                self.assertEqual(spin.text(), "08")
+
+        widget.hour_spin.setValue(15)
+        widget.minute_spin.setValue(59)
+        click_arrow(widget.minute_spin, QStyle.SubControl.SC_SpinBoxUp)
+        self.assertEqual(widget.remaining_label.text(), "25分後")
+        self.assertEqual(widget.selected_datetime(), datetime(2026, 11, 8, 15))
+
+    def test_typed_values_show_two_digits_after_editing(self) -> None:
+        widget = self.keep_widget(BreakTimeInput())
+        widget.show()
+        widget.activateWindow()
+        self.app.processEvents()
+        for spin, typed, expected in (
+            (widget.hour_spin, "9", "09"),
+            (widget.minute_spin, "5", "05"),
+        ):
+            spin.setFocus()
+            spin.selectAll()
+            QTest.keyClicks(spin, typed)
+            QTest.keyClick(spin, Qt.Key.Key_Tab)
+            self.assertEqual(spin.text(), expected)
+        self.assertEqual(widget.selected_datetime(), datetime(2026, 11, 9, 9, 5))
+
     def test_break_dialog_resumes_with_date_and_keeps_idle_gate(self) -> None:
         callback = Mock()
         dialog = self.make_break_dialog(callback)
         self.now = datetime(2026, 11, 8, 23, 30)
         dialog.open_prompt()
-        self.assertEqual(dialog._break_time_input.time_edit.time(), QTime(0, 15))
+        self.assertEqual(dialog._break_time_input.hour_spin.value(), 0)
+        self.assertEqual(dialog._break_time_input.minute_spin.value(), 15)
         self.assertFalse(dialog._break_done_button.isEnabled())
         dialog._break_done_button.click()
         callback.assert_not_called()
         dialog._mark_break_satisfied()
         self.assertTrue(dialog._break_time_input._refresh_timer.isActive())
-        dialog._break_time_input.time_edit.setTime(QTime(0, 30))
-        self.assertEqual(dialog._break_time_input.remaining_label.text(), "休憩まで: 60分後")
+        dialog._break_time_input.minute_spin.setValue(30)
+        self.assertEqual(dialog._break_time_input.remaining_label.text(), "60分後")
         dialog._break_done_button.click()
         callback.assert_called_once_with("break_done", None, datetime(2026, 11, 9, 0, 30))
         self.assertFalse(dialog._break_time_input._refresh_timer.isActive())
         self.now = datetime(2026, 11, 9, 1)
         dialog.open_prompt()
-        self.assertEqual(dialog._break_time_input.time_edit.time(), QTime(1, 45))
+        self.assertEqual(dialog._break_time_input.hour_spin.value(), 1)
+        self.assertEqual(dialog._break_time_input.minute_spin.value(), 45)
 
     def test_unconfirmed_time_rolls_forward_but_confirmation_keeps_date(self) -> None:
         widget = self.keep_widget(BreakTimeInput())
-        widget.time_edit.setTime(QTime(15, 20))
+        widget.hour_spin.setValue(15)
+        widget.minute_spin.setValue(20)
         self.now = datetime(2026, 11, 8, 15, 20)
         widget.refresh()
-        self.assertEqual(widget.remaining_label.text(), "休憩まで: 1440分後")
+        self.assertEqual(widget.remaining_label.text(), "1440分後")
         self.assertEqual(widget.selected_datetime(), datetime(2026, 11, 9, 15, 20))
 
     def test_timer_arrival_and_sleep_jump_fire_once(self) -> None:
