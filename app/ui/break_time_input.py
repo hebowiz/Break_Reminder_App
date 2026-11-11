@@ -6,7 +6,7 @@ from datetime import datetime, time
 
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QHideEvent, QShowEvent
-from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QSpinBox, QWidget
+from PySide6.QtWidgets import QFormLayout, QHBoxLayout, QLabel, QSpinBox, QStyleFactory, QWidget
 
 from app.core.time_utils import (
     calculate_next_break_datetime,
@@ -23,6 +23,10 @@ class TwoDigitSpinBox(QSpinBox):
         self.setRange(0, maximum)
         self.setSingleStep(1)
         self.setWrapping(True)
+        # Keep arrows stacked on the right regardless of the Windows theme.
+        self._spin_style = QStyleFactory.create("Fusion")
+        self._spin_style.setParent(self)
+        self.setStyle(self._spin_style)
 
     def textFromValue(self, value: int) -> str:  # noqa: N802
         return f"{value:02d}"
